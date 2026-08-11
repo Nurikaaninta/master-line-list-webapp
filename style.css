@@ -1,0 +1,247 @@
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.font-mono-data {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* =========================================================
+   LINE LIST TABLE
+   Freeze sampai Insulation Section (Type + Thickness).
+   Complete Line No. dan seluruh kolom setelahnya tetap scroll.
+   ========================================================= */
+.line-list-scroll {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    isolation: isolate;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.excel-table {
+    width: max-content !important;
+    min-width: 100%;
+    table-layout: fixed !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+/* Lebar kolom dikontrol dari colgroup. */
+.excel-table col.c-no       { width: 56px; }
+.excel-table col.c-size     { width: 110px; }
+.excel-table col.c-fluid    { width: 155px; }
+.excel-table col.c-spec     { width: 95px; }
+.excel-table col.c-seq      { width: 95px; }
+.excel-table col.c-ins-type { width: 95px; }
+.excel-table col.c-ins-thick{ width: 105px; }
+
+.excel-table col.c-complete { width: 165px; }
+.excel-table col.c-pid      { width: 125px; }
+.excel-table col.c-from     { width: 220px; }
+.excel-table col.c-to       { width: 220px; }
+.excel-table col.c-service  { width: 145px; }
+.excel-table col.c-phase    { width: 95px; }
+.excel-table col.c-mass     { width: 145px; }
+.excel-table col.c-vol      { width: 145px; }
+.excel-table col.c-press    { width: 120px; }
+.excel-table col.c-temp     { width: 120px; }
+.excel-table col.c-density  { width: 125px; }
+.excel-table col.c-visc     { width: 110px; }
+.excel-table col.c-nde      { width: 100px; }
+.excel-table col.c-test-med { width: 120px; }
+.excel-table col.c-test-press { width: 130px; }
+.excel-table col.c-painting { width: 125px; }
+.excel-table col.c-pwht    { width: 100px; }
+.excel-table col.c-stress  { width: 155px; }
+.excel-table col.c-stress-calc { width: 190px; }
+.excel-table col.c-remarks { width: 180px; }
+.excel-table col.c-approval { width: 135px; }
+.excel-table col.c-action  { width: 70px; }
+
+.excel-table th,
+.excel-table td {
+    box-sizing: border-box;
+    height: 38px;
+    padding: 6px 8px;
+    border-right: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+.excel-table th:first-child,
+.excel-table td:first-child {
+    border-left: 1px solid #cbd5e1;
+}
+
+.excel-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.excel-table thead th {
+    background-color: #f8fafc;
+    color: #1e293b;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* =========================================================
+   STICKY / FREEZE
+   Penting: JANGAN gunakan nth-child untuk header karena
+   header memiliki rowspan/colspan. Gunakan class freeze-col.
+   ========================================================= */
+
+/* Lima header pertama */
+.excel-table thead .freeze-col-1,
+.excel-table tbody .freeze-col-1 {
+    position: sticky;
+    left: 0;
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+}
+
+.excel-table thead .freeze-col-2,
+.excel-table tbody .freeze-col-2 {
+    position: sticky;
+    left: 56px;
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+}
+
+.excel-table thead .freeze-col-3,
+.excel-table tbody .freeze-col-3 {
+    position: sticky;
+    left: 166px;
+    width: 155px;
+    min-width: 155px;
+    max-width: 155px;
+}
+
+.excel-table thead .freeze-col-4,
+.excel-table tbody .freeze-col-4 {
+    position: sticky;
+    left: 321px;
+    width: 95px;
+    min-width: 95px;
+    max-width: 95px;
+}
+
+.excel-table thead .freeze-col-5,
+.excel-table tbody .freeze-col-5 {
+    position: sticky;
+    left: 416px;
+    width: 95px;
+    min-width: 95px;
+    max-width: 95px;
+}
+
+.excel-table thead .freeze-col-6,
+.excel-table tbody .freeze-col-6 {
+    position: sticky;
+    left: 511px;
+    width: 95px;
+    min-width: 95px;
+    max-width: 95px;
+}
+
+.excel-table thead .freeze-col-7,
+.excel-table tbody .freeze-col-7 {
+    position: sticky;
+    left: 606px;
+    width: 105px;
+    min-width: 105px;
+    max-width: 105px;
+}
+
+/* Header group Insulation Section mencakup Type + Thickness. */
+.excel-table thead .freeze-insulation {
+    position: sticky;
+    left: 511px;
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
+    z-index: 120;
+    background-color: #f8fafc;
+}
+
+/* Filter row dan body harus berada di atas kolom yang bergerak. */
+.excel-table tbody .freeze-col,
+.excel-table thead .freeze-col {
+    background-color: #f8fafc;
+}
+
+.excel-table tbody .freeze-col {
+    background-color: #fff;
+    z-index: 30;
+}
+
+.excel-table tbody tr:hover .freeze-col {
+    background-color: #eff6ff;
+}
+
+/* Header frozen berada paling depan. */
+.excel-table thead .freeze-col {
+    z-index: 130;
+}
+
+/* Filter row adalah baris ketiga header. */
+.excel-table thead tr.filter-row .freeze-col {
+    z-index: 140;
+    background-color: #f3f4f6;
+}
+
+/* Tidak ada shadow/warna pembeda di batas freeze. */
+.excel-table .freeze-col,
+.excel-table .freeze-insulation {
+    box-shadow: none !important;
+}
+
+/* Input tidak boleh membuat ukuran kolom berubah. */
+.excel-table input,
+.excel-table select,
+.excel-table button {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.excel-table th input,
+.excel-table td input,
+.excel-table th select,
+.excel-table td select {
+    width: 100%;
+    min-width: 0;
+}
+
+/* Jangan biarkan teks panjang mendorong kolom lain. */
+.excel-table td input {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.line-list-scroll::-webkit-scrollbar {
+    width: 7px;
+    height: 9px;
+}
+.line-list-scroll::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.line-list-scroll::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.line-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
