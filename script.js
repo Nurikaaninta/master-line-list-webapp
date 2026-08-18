@@ -258,7 +258,8 @@ function renderLogos(proj) {
     if (proj.rightLogo) {
         rightImg.src = proj.rightLogo;
     } else {
-        rightImg.src = 'assets/tripatra-logo.png';
+        rightImg.src = 'tripatra-logo.png';
+        rightImg.onerror = function () { this.onerror = null; this.src = 'tripatra-logo.png'; };
     }
     rightImg.classList.remove('hidden');
     rightPlaceholder.classList.add('hidden');
