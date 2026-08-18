@@ -32,7 +32,7 @@ body {
 
 /* Lebar kolom dikontrol dari colgroup. */
 .excel-table col.c-no       { width: 56px; }
-.excel-table col.c-size     { width: 110px; }
+.excel-table col.c-size     { width: 150px; }
 .excel-table col.c-fluid    { width: 155px; }
 .excel-table col.c-spec     { width: 95px; }
 .excel-table col.c-seq      { width: 95px; }
@@ -116,15 +116,15 @@ body {
 .excel-table tbody .freeze-col-2 {
     position: sticky;
     left: 56px;
-    width: 110px;
-    min-width: 110px;
-    max-width: 110px;
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
 }
 
 .excel-table thead .freeze-col-3,
 .excel-table tbody .freeze-col-3 {
     position: sticky;
-    left: 166px;
+    left: 206px;
     width: 155px;
     min-width: 155px;
     max-width: 155px;
@@ -133,7 +133,7 @@ body {
 .excel-table thead .freeze-col-4,
 .excel-table tbody .freeze-col-4 {
     position: sticky;
-    left: 321px;
+    left: 361px;
     width: 95px;
     min-width: 95px;
     max-width: 95px;
@@ -142,7 +142,7 @@ body {
 .excel-table thead .freeze-col-5,
 .excel-table tbody .freeze-col-5 {
     position: sticky;
-    left: 416px;
+    left: 456px;
     width: 95px;
     min-width: 95px;
     max-width: 95px;
@@ -151,7 +151,7 @@ body {
 .excel-table thead .freeze-col-6,
 .excel-table tbody .freeze-col-6 {
     position: sticky;
-    left: 511px;
+    left: 551px;
     width: 95px;
     min-width: 95px;
     max-width: 95px;
@@ -160,7 +160,7 @@ body {
 .excel-table thead .freeze-col-7,
 .excel-table tbody .freeze-col-7 {
     position: sticky;
-    left: 606px;
+    left: 646px;
     width: 105px;
     min-width: 105px;
     max-width: 105px;
@@ -169,7 +169,7 @@ body {
 /* Header group Insulation Section mencakup Type + Thickness. */
 .excel-table thead .freeze-insulation {
     position: sticky;
-    left: 511px;
+    left: 551px;
     width: 200px;
     min-width: 200px;
     max-width: 200px;
@@ -244,4 +244,149 @@ body {
 }
 .line-list-scroll::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
+}
+
+
+/* =========================================================
+   MASTER LINE LIST - LINE SIZE FILTER ICON
+   ========================================================= */
+.line-size-header-cell {
+    white-space: nowrap !important;
+}
+.line-size-header-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+.line-size-filter-btn {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 10px;
+}
+.line-size-filter-btn:hover,
+.line-size-filter-btn.active {
+    color: #0f766e;
+    background: #d1fae5;
+}
+.line-size-filter-menu {
+    position: fixed;
+    z-index: 100000;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 16px 35px rgba(15,23,42,.18);
+    padding: 10px;
+}
+.line-size-filter-title {
+    font-size: 10px;
+    font-weight: 800;
+    color: #334155;
+    padding: 4px 6px 8px;
+    letter-spacing: .03em;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 7px;
+}
+.line-size-filter-option {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 8px;
+    border: 0;
+    background: #fff;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.line-size-filter-option:hover,
+.line-size-filter-option.active {
+    background: #ecfdf5;
+    color: #047857;
+}
+.line-size-filter-option i {
+    opacity: 0;
+}
+.line-size-filter-option.active i {
+    opacity: 1;
+}
+.line-size-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    margin-top: 5px;
+}
+.line-size-filter-chip {
+    min-height: 30px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.line-size-filter-chip:hover,
+.line-size-filter-chip.active {
+    border-color: #10b981;
+    background: #d1fae5;
+    color: #047857;
+}
+
+/* Keep the freeze layers above scrolling cells but below the filter popup. */
+.excel-table thead .freeze-col { z-index: 130; }
+.excel-table thead tr.filter-row .freeze-col { z-index: 140; }
+.excel-table tbody .freeze-col { z-index: 30; }
+
+/* Numeric fields */
+.excel-table input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+.excel-table input[type="number"]::-webkit-outer-spin-button,
+.excel-table input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+
+/* Line Size header: reserve enough width for the filter icon. */
+.line-size-header-cell {
+    min-width: 150px !important;
+    width: 150px !important;
+    overflow: visible !important;
+}
+.line-size-header-wrap {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+.line-size-header-wrap > span {
+    flex: 0 0 auto !important;
+}
+.line-size-filter-btn {
+    flex: 0 0 18px !important;
+    width: 18px !important;
+    min-width: 18px !important;
+    max-width: 18px !important;
+    height: 18px !important;
+    margin: 0 !important;
+    position: relative !important;
+    z-index: 300 !important;
 }
