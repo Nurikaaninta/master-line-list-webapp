@@ -27,7 +27,7 @@
         <div class="bg-emerald-600 p-6 text-center border-b border-slate-800 relative">
             <div class="flex justify-center items-center space-x-3 mb-2">
                 <div class="bg-white px-3 py-1.5 rounded shadow flex items-center justify-center">
-                    <img src="tripatra-logo.png" alt="Tripatra" class="h-8 w-auto object-contain">
+                    <img src="assets/tripatra-logo.png" alt="Tripatra" class="h-8 w-auto object-contain">
                 </div>
             </div>
             <h1 class="text-lg font-extrabold text-white tracking-wide">MASTER LINE LIST WEBAPP</h1>
@@ -87,7 +87,7 @@
             <div class="p-4 flex items-center justify-between border-b border-blue-900">
                 <div id="sidebarBrandContainer" class="flex items-center gap-3 overflow-hidden">
                     <div class="bg-white px-3 py-1.5 rounded-lg flex items-center justify-center shadow-xs shrink-0">
-                        <img src="tripatra-logo.png" alt="Tripatra" class="h-8 w-auto object-contain">
+                        <img src="assets/tripatra-logo.png" alt="Tripatra" class="h-8 w-auto object-contain">
                     </div>
                     <div class="sidebar-text truncate">
                         <h1 class="text-white font-bold text-sm tracking-wide">MASTER LINE LIST</h1>
@@ -346,7 +346,7 @@
                                 <div class="flex flex-col justify-center items-center w-48 shrink-0 relative group">
                                     <div id="rightLogoContainer" class="w-full h-16 flex items-center justify-center cursor-pointer relative overflow-hidden">
                                         <div id="rightLogoPlaceholder" class="hidden"></div>
-                                        <img id="rightLogoImg" src="tripatra-logo.png" class="max-h-14 max-w-full object-contain" alt="Logo Tripatra">
+                                        <img id="rightLogoImg" src="assets/tripatra-logo.png" class="max-h-14 max-w-full object-contain" alt="Logo Tripatra">
                                     </div>
                                 </div>
                             </div>
@@ -366,14 +366,7 @@
 <thead class="sticky top-0 z-20 shadow-xs">
                                     <tr>
                                         <th rowspan="2" class="freeze-col freeze-col-1 w-10">No</th>
-                                        <th rowspan="2" class="freeze-col freeze-col-2 line-size-header-cell">
-                                            <span class="line-size-header-wrap">
-                                                <span>LINE SIZE (INCH)</span>
-                                                <button type="button" class="line-size-filter-btn" id="lineSizeFilterBtn" onclick="toggleLineSizeFilter(event)" aria-label="Filter Line Size" title="Filter Line Size">
-                                                    <i class="fa-solid fa-filter"></i>
-                                                </button>
-                                            </span>
-                                        </th>
+                                        <th rowspan="2" class="freeze-col freeze-col-2 line-size-header">Line Size (Inch)</th>
                                         <th rowspan="2" class="freeze-col freeze-col-3">Process Fluid Identifier</th>
                                         <th rowspan="2" class="freeze-col freeze-col-4">Pipe.Spec</th>
                                         <th rowspan="2" class="freeze-col freeze-col-5">Seq. No</th>
@@ -414,7 +407,7 @@
                                     </tr>
                                     <tr class="bg-gray-100 filter-row">
                                         <th class="freeze-col freeze-col-1"></th>
-                                        <th class="freeze-col freeze-col-2"></th>
+                                        <th class="freeze-col freeze-col-2 size-filter-cell"><input type="text" oninput="filterByColumn('size', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
                                         <th class="freeze-col freeze-col-3"><input type="text" oninput="filterByColumn('fluid_id', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
                                         <th class="freeze-col freeze-col-4"><input type="text" oninput="filterByColumn('spec', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
                                         <th class="freeze-col freeze-col-5"><input type="text" oninput="filterByColumn('seq', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
@@ -449,7 +442,6 @@
                                 </thead>
                                 <tbody id="lineTableBody" class="font-mono-data"></tbody>
                             </table>
-                            <div id="lineSizeFilterMenu" class="line-size-filter-menu hidden" role="menu" aria-label="Filter Line Size"></div>
                         </div>
 
                         <div class="bg-slate-50 border-t border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -707,7 +699,7 @@
     </div>
 
     <!-- External Script -->
-    <script src="script.js"></script>
+    <script src="script.js?v=20260818-add-row-autoscroll-final"></script>
     <script>
         let isSidebarCollapsed = false;
         window.toggleSidebar = function() {

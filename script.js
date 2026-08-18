@@ -78,15 +78,6 @@ let projectsData = [
 let currentProjectIndex = 0;
 let currentProject = 0; // Menyesuaikan acuan untuk updateProjectDropdownOptions
 let tableFilters = {};
-let lineSizeFilter = "";
-const LINE_SIZE_OPTIONS = [
-    ["0.5", "1/2\""], ["0.75", "3/4\""], ["1", "1\""], ["1.25", "1 1/4\""],
-    ["1.5", "1 1/2\""], ["2", "2\""], ["2.5", "2 1/2\""], ["3", "3\""],
-    ["4", "4\""], ["5", "5\""], ["6", "6\""], ["8", "8\""], ["10", "10\""],
-    ["12", "12\""], ["14", "14\""], ["16", "16\""], ["18", "18\""], ["20", "20\""],
-    ["22", "22\""], ["24", "24\""], ["26", "26\""], ["28", "28\""], ["30", "30\""],
-    ["32", "32\""], ["36", "36\""], ["40", "40\""], ["42", "42\""], ["48", "48\""]
-];
 
 document.addEventListener('DOMContentLoaded', () => {
     // Event Listener untuk Form Login
@@ -311,6 +302,55 @@ function renderRevisionHeader(proj) {
     `;
 }
 
+
+const LINE_SIZE_OPTIONS = [
+    "0.5", "0.75", "1", "1.5", "2", "3", "4", "6", "8",
+    "10", "12", "16", "18", "20", "24", "28", "30", "32", "34"
+];
+
+/**
+ * Hanya memperbaiki simbol inch pada Complete Line No.
+ * Contoh: 8''-CP-B1-190016 -> 8"-CP-B1-190016
+ * Isi lainnya tidak diubah.
+ */
+function normalizeCompleteLineNo(value) {
+    return String(value ?? "").replace(/''/g, '"');
+}
+
+function escapeHtmlAttr(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function renderLineSizeSelect(line, index, canEdit) {
+    const current = String(line.size ?? "").trim();
+    const options = LINE_SIZE_OPTIONS.map(size => {
+        const selected = current === size ? " selected" : "";
+        return `<option value="${size}"${selected}>${size}"</option>`;
+    }).join("");
+
+    // Jangan menghilangkan data lama jika nilainya berada di luar daftar.
+    const customOption = current && !LINE_SIZE_OPTIONS.includes(current)
+        ? `<option value="${escapeHtmlAttr(current)}" selected>${escapeHtmlAttr(current)}"</option>`
+        : "";
+
+    return `
+        <select
+            onchange="updateLineField(${index}, 'size', this.value)"
+            ${!canEdit ? 'disabled' : ''}
+            class="w-full px-1.5 py-1 border rounded text-xs bg-white"
+            title="Pilih ukuran pipa (inch)"
+        >
+            <option value=""${current === "" ? " selected" : ""}>Pilih</option>
+            ${customOption}
+            ${options}
+        </select>
+    `;
+}
+
 function renderTableRows(proj) {
     const tbody = document.getElementById('lineTableBody');
     tbody.innerHTML = '';
@@ -322,25 +362,30 @@ function renderTableRows(proj) {
     let allApproved = proj.lines.length > 0 && proj.lines.every(l => l.processApproval === 'Approved');
 
     proj.lines.forEach((line, index) => {
-        normalizeLineNumericFields(line);
-        line.complete_no = buildCompleteLineNo(line);
         if (!checkRowAgainstFilters(line)) return;
 
         const tr = document.createElement('tr');
-        tr.dataset.lineIndex = String(index);
         tr.className = "hover:bg-blue-50/50 transition border-b border-slate-100";
 
         tr.innerHTML = `
             <td class="freeze-col freeze-col-1 text-center font-bold text-slate-500">${index + 1}</td>
-            <td class="freeze-col freeze-col-2"><input type="number" min="0" step="0.01" inputmode="decimal" value="${line.size}" oninput="sanitizeNumericInput(this)" onchange="updateLineField(${index}, 'size', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs" placeholder="inch"></td>
+            <td class="freeze-col freeze-col-2">${renderLineSizeSelect(line, index, canEdit)}</td>
             <td class="freeze-col freeze-col-3"><input type="text" value="${line.fluid_id}" onchange="updateLineField(${index}, 'fluid_id', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
             <td class="freeze-col freeze-col-4"><input type="text" value="${line.spec}" onchange="updateLineField(${index}, 'spec', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
-            <td class="freeze-col freeze-col-5"><input type="number" min="0" step="1" inputmode="numeric" value="${line.seq}" oninput="sanitizeIntegerInput(this)" onchange="updateLineField(${index}, 'seq', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono" placeholder="Seq No"></td>
+            <td class="freeze-col freeze-col-5"><input type="text" value="${line.seq}" onchange="updateLineField(${index}, 'seq', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
             <td class="freeze-col freeze-col-6"><input type="text" value="${line.ins_type}" onchange="updateLineField(${index}, 'ins_type', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
-            <td class="freeze-col freeze-col-7"><input type="number" min="0" step="0.01" inputmode="decimal" value="${line.ins_thick}" oninput="sanitizeNumericInput(this)" onchange="updateLineField(${index}, 'ins_thick', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono" placeholder="mm"></td>
+            <td class="freeze-col freeze-col-7"><input type="text" value="${line.ins_thick}" onchange="updateLineField(${index}, 'ins_thick', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
-            <td><input type="text" value="${line.complete_no || 'AUTO'}" readonly tabindex="-1" class="w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/30 cursor-not-allowed" title="Terisi otomatis dari Line Size + Process Fluid Identifier + Pipe.Spec + Seq. No + Insulation"></td>
+            <td>
+    <input
+        type="text"
+        value='${escapeHtmlAttr(normalizeCompleteLineNo(line.complete_no))}'
+        onchange="updateLineField(${index}, 'complete_no', normalizeCompleteLineNo(this.value))"
+        ${!canEdit ? 'disabled' : ''}
+        class="w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/30"
+    >
+</td>
             <td><input type="text" value="${line.pid}" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.from}" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.to}" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
@@ -395,21 +440,17 @@ function renderTableRows(proj) {
 }
 
 function updateLineField(index, field, val) {
-    const line = projectsData[currentProjectIndex].lines[index];
-    if (field === 'size' || field === 'ins_thick') val = sanitizeNumericValue(val);
-    if (field === 'seq') val = sanitizeIntegerValue(val);
-    if (field === 'complete_no') return; // Complete Line No is system-generated.
-    line[field] = val;
-    line.complete_no = buildCompleteLineNo(line);
+    projectsData[currentProjectIndex].lines[index][field] = val;
     renderDashboard();
 }
 
 function addLineRow() {
     const proj = projectsData[currentProjectIndex];
-    const newIndex = proj.lines.length;
 
+    // Baris baru harus benar-benar kosong agar user mengisi data sendiri.
+    // Hanya No dan status approval yang dihasilkan oleh sistem.
     proj.lines.push({
-        id: newIndex + 1,
+        id: proj.lines.length + 1,
         size: "",
         fluid_id: "",
         spec: "",
@@ -442,23 +483,31 @@ function addLineRow() {
         processApproval: "Pending"
     });
 
-    // A newly added row must remain visible even when a previous filter was active.
-    tableFilters = {};
-    lineSizeFilter = "";
     renderDashboard();
 
+    // Setelah baris baru dibuat, langsung arahkan viewport tabel ke BARIS TERAKHIR.
+    // Tidak perlu user melakukan scroll manual ke bawah.
     requestAnimationFrame(() => {
-        const scroll = document.querySelector('.line-list-scroll');
-        const row = document.querySelector(`#lineTableBody tr[data-line-index="${newIndex}"]`);
-        if (scroll) {
-            scroll.scrollTop = scroll.scrollHeight;
-        }
-        if (row) {
-            row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-            const firstInput = row.querySelector('input');
-            if (firstInput) firstInput.focus();
+        const tableScroll = document.querySelector(".line-list-scroll");
+        const tbody = document.getElementById("lineTableBody");
+
+        if (tableScroll) {
+            // Pastikan posisi horizontal tetap di awal/freeze columns.
+            tableScroll.scrollLeft = 0;
+
+            // Geser vertikal sampai baris terakhir benar-benar terlihat.
+            tableScroll.scrollTop = tableScroll.scrollHeight;
+
+            // Fokus ke input pertama pada baris baru tanpa mengubah posisi halaman.
+            const lastRow = tbody ? tbody.lastElementChild : null;
+            if (lastRow) {
+                const firstInput = lastRow.querySelector("input, select, textarea");
+                if (firstInput) firstInput.focus({ preventScroll: true });
+            }
         }
     });
+
+    showModal("Berhasil", "Baris pipa kosong berhasil ditambahkan dan tabel otomatis menuju baris terakhir.", "success");
 }
 
 function deleteLineRow(index) {
@@ -482,102 +531,7 @@ function filterByColumn(colKey, val) {
     renderDashboard();
 }
 
-function normalizeLineNumericFields(line) {
-    line.size = sanitizeNumericValue(line.size);
-    line.seq = sanitizeIntegerValue(line.seq);
-    line.ins_thick = sanitizeNumericValue(line.ins_thick);
-}
-
-function sanitizeNumericValue(value) {
-    if (value === null || value === undefined) return '';
-    const cleaned = String(value).replace(/[^0-9.]/g, '');
-    if (!cleaned) return '';
-    const parts = cleaned.split('.');
-    return parts.length > 1 ? parts[0] + '.' + parts.slice(1).join('') : parts[0];
-}
-
-function sanitizeIntegerValue(value) {
-    if (value === null || value === undefined) return '';
-    return String(value).replace(/\D/g, '');
-}
-
-function sanitizeNumericInput(input) {
-    const value = sanitizeNumericValue(input.value);
-    if (input.value !== value) input.value = value;
-}
-
-function sanitizeIntegerInput(input) {
-    const value = sanitizeIntegerValue(input.value);
-    if (input.value !== value) input.value = value;
-}
-
-function buildCompleteLineNo(line) {
-    const size = sanitizeNumericValue(line.size);
-    const fluid = String(line.fluid_id || '').trim().toUpperCase();
-    const spec = String(line.spec || '').trim().toUpperCase();
-    const seq = sanitizeIntegerValue(line.seq);
-    if (!size || !fluid || !spec || !seq) return '';
-
-    let result = `${size}''-${fluid}-${spec}-${seq}`;
-    const insType = String(line.ins_type || '').trim().toUpperCase();
-    const insThick = sanitizeNumericValue(line.ins_thick);
-    if (insType && insType !== '-' && insThick) {
-        result += `-${insType}-${insThick}`;
-    }
-    return result;
-}
-
-function toggleLineSizeFilter(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const menu = document.getElementById('lineSizeFilterMenu');
-    const button = document.getElementById('lineSizeFilterBtn');
-    if (!menu || !button) return;
-
-    if (!menu.classList.contains('hidden')) {
-        closeLineSizeFilter();
-        return;
-    }
-
-    menu.innerHTML = `
-        <div class="line-size-filter-title">FILTER LINE SIZE</div>
-        <button type="button" class="line-size-filter-option ${!lineSizeFilter ? 'active' : ''}" onclick="setLineSizeFilter('')">
-            <span>Semua</span><i class="fa-solid fa-check"></i>
-        </button>
-        <div class="line-size-filter-grid">
-            ${LINE_SIZE_OPTIONS.map(([value, label]) => `
-                <button type="button" class="line-size-filter-chip ${lineSizeFilter === value ? 'active' : ''}" onclick="setLineSizeFilter('${value}')">${label}</button>
-            `).join('')}
-        </div>`;
-
-    document.body.appendChild(menu);
-    menu.classList.remove('hidden');
-    const rect = button.getBoundingClientRect();
-    const width = Math.min(320, window.innerWidth - 20);
-    menu.style.width = `${width}px`;
-    menu.style.left = `${Math.max(10, Math.min(rect.left, window.innerWidth - width - 10))}px`;
-    menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menu.offsetHeight - 10)}px`;
-    button.classList.add('active');
-}
-
-function setLineSizeFilter(value) {
-    lineSizeFilter = String(value || '');
-    closeLineSizeFilter();
-    renderDashboard();
-}
-
-function closeLineSizeFilter() {
-    const menu = document.getElementById('lineSizeFilterMenu');
-    const button = document.getElementById('lineSizeFilterBtn');
-    if (menu) menu.classList.add('hidden');
-    if (button) button.classList.toggle('active', !!lineSizeFilter);
-}
-
 function checkRowAgainstFilters(line) {
-    if (lineSizeFilter) {
-        const lineSize = sanitizeNumericValue(line.size);
-        if (lineSize !== lineSizeFilter) return false;
-    }
     for (let key in tableFilters) {
         const filterVal = tableFilters[key];
         if (!filterVal) continue;
@@ -600,15 +554,7 @@ function closeExportMenu() {
 document.addEventListener('click', (event) => {
     const wrapper = document.getElementById('exportMenuWrapper');
     if (wrapper && !wrapper.contains(event.target)) closeExportMenu();
-    const filterMenu = document.getElementById('lineSizeFilterMenu');
-    const filterBtn = document.getElementById('lineSizeFilterBtn');
-    if (filterMenu && !filterMenu.contains(event.target) && filterBtn && !filterBtn.contains(event.target)) {
-        closeLineSizeFilter();
-    }
 });
-
-window.addEventListener('resize', closeLineSizeFilter);
-window.addEventListener('scroll', closeLineSizeFilter, true);
 
 function showDownloadToast(message) {
     const old = document.getElementById('downloadToast');
@@ -631,7 +577,7 @@ function exportToExcel() {
         "Seq No": l.seq,
         "Insulation Type": l.ins_type,
         "Insulation Thickness [mm]": l.ins_thick,
-        "Complete Line No": l.complete_no,
+        "Complete Line No": normalizeCompleteLineNo(l.complete_no),
         "P&ID No": l.pid,
         "From": l.from,
         "To": l.to,
@@ -685,7 +631,7 @@ function handleExcelImport(e) {
                     seq: String(row["Seq. No"] || row["Seq No"] || (190000 + idx)),
                     ins_type: String(row["Insulation"] || row["Insulation Type"] || "-"),
                     ins_thick: String(row["Unnamed: 6"] || row["Insulation Thickness [mm]"] || "-"),
-                    complete_no: "",
+                    complete_no: String(row["Complete Line No."] || row["Complete Line No"] || "Line-Import"),
                     pid: String(row["P&ID No"] || "PID-01"),
                     from: String(row["From"] || "-"),
                     to: String(row["To"] || "-"),
@@ -711,10 +657,6 @@ function handleExcelImport(e) {
                     processApproval: "Pending"
                 }));
 
-                importedLines.forEach(line => {
-                    normalizeLineNumericFields(line);
-                    line.complete_no = buildCompleteLineNo(line);
-                });
                 projectsData[currentProjectIndex].lines = importedLines;
                 renderDashboard();
                 showModal("Import Berhasil", `Berhasil mengimpor ${importedLines.length} baris data dari Excel!`, "success");
@@ -777,7 +719,7 @@ async function generatePDF() {
     ];
 
     const rows = proj.lines.map((l, idx) => [
-        idx + 1, l.size, l.fluid_id, l.spec, l.seq, l.ins_type, l.ins_thick, l.complete_no, l.pid,
+        idx + 1, l.size, l.fluid_id, l.spec, l.seq, l.ins_type, l.ins_thick, normalizeCompleteLineNo(l.complete_no), l.pid,
         l.from, l.to, l.service, l.phase, l.mass, l.vol, l.press_op, l.press_des, l.temp_op, l.temp_des,
         l.density, l.visc, l.nde_rt, l.nde_pt, l.test_med, l.test_press, l.painting, l.pwht,
         l.stress_critical, l.stress_calc_no, l.remarks, l.processApproval
