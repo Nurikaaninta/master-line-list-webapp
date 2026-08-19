@@ -82,7 +82,7 @@ let tableFilters = {};
 // Sinkronkan Complete Line No. lama dengan format otomatis saat aplikasi pertama kali dibuka.
 // Tidak mengubah data sumber selain membentuk field Complete Line No. dari kolom sumbernya.
 projectsData.forEach(project => {
-    project.lines.forEach(line => {
+    project.lines.forEach((line, index) => {
         line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
         if (line.ins_thick === '-' || line.ins_thick === null || line.ins_thick === undefined) {
             line.ins_thick = '';
@@ -91,7 +91,7 @@ projectsData.forEach(project => {
         }
         line.seq = String(line.seq ?? '').replace(/\D/g, '');
         line.spec = String(line.spec ?? '').trim().toUpperCase();
-        line.complete_no = buildCompleteLineNo(line);
+        line.complete_no = buildCompleteLineNo(line, project.lines, index);
     });
 });
 
@@ -220,6 +220,7 @@ function renderDashboard() {
     document.getElementById('breadcrumbProject').innerText = proj.name;
     document.getElementById('headerProjectName').value = proj.name;
     document.getElementById('headerDocNumber').value = proj.docNumber;
+    if (typeof initProjectNameMarquee === 'function') initProjectNameMarquee();
 
     // Perbarui fungsi render dropdown project agar menyisipkan opsi Add Project di akhir[cite: 10]
     updateProjectDropdownOptions();
@@ -325,6 +326,9 @@ const LINE_SIZE_OPTIONS = [
     "10", "12", "16", "18", "20", "24", "28", "30", "32", "34"
 ];
 
+// Hanya baris yang SEDANG diedit dan menghasilkan duplikat yang ditandai merah.
+let duplicateSeqIndex = null;
+
 /**
  * Complete Line No. dibuat OTOMATIS dari data line.
  * Format utama: 8"-CP-B1-190016
@@ -334,13 +338,21 @@ function normalizeCompleteLineNo(value) {
     return String(value ?? "").replace(/''/g, '"');
 }
 
-function buildCompleteLineNo(line) {
+function isDuplicateSeq(line, lines, index = -1) {
+    const seq = String(line?.seq ?? "").replace(/\D/g, "").trim();
+    if (!seq || !Array.isArray(lines)) return false;
+    return lines.some((other, otherIndex) =>
+        otherIndex !== index &&
+        String(other?.seq ?? "").replace(/\D/g, "").trim() === seq
+    );
+}
+
+function buildCompleteLineNo(line, lines = null, index = -1) {
     const size = String(line?.size ?? "").trim().replace(/["']+$/g, "");
     const fluid = String(line?.fluid_id ?? "").trim().toUpperCase();
     const spec = String(line?.spec ?? "").trim().toUpperCase();
     const seq = String(line?.seq ?? "").replace(/\D/g, "").trim();
 
-    // Complete Line No. baru dibuat setelah komponen wajib tersedia.
     if (!size || !fluid || !spec || !seq) return "";
 
     let result = `${size}"-${fluid}-${spec}-${seq}`;
@@ -353,8 +365,14 @@ function buildCompleteLineNo(line) {
             result += `-${insThick.replace(',', '.')}`;
         }
     }
-
     return result;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 }
 
 function escapeHtmlAttr(value) {
@@ -401,12 +419,24 @@ function renderTableRows(proj) {
 
     let allApproved = proj.lines.length > 0 && proj.lines.every(l => l.processApproval === 'Approved');
 
+    // Seq. No. harus unik. Baris dengan Seq. No. duplikat diberi tanda merah.
+    const seqCounts = {};
+    proj.lines.forEach(l => {
+        const s = String(l.seq ?? '').replace(/\D/g, '').trim();
+        if (s) seqCounts[s] = (seqCounts[s] || 0) + 1;
+    });
+
     proj.lines.forEach((line, index) => {
         if (!checkRowAgainstFilters(line)) return;
 
         const tr = document.createElement('tr');
         tr.dataset.lineIndex = String(index);
-        tr.className = "hover:bg-blue-50/50 transition border-b border-slate-100";
+        const normalizedSeq = String(line.seq ?? '').replace(/\D/g, '').trim();
+        const isDuplicateSeq = index === duplicateSeqIndex && !!normalizedSeq && seqCounts[normalizedSeq] > 1;
+        tr.className = 'hover:bg-blue-50/50 transition border-b border-slate-100';
+        if (isDuplicateSeq) {
+            tr.title = `WARNING: Seq. No. ${normalizedSeq} duplikat. Mohon gunakan Seq. No. yang lain.`;
+        }
 
         tr.innerHTML = `
             <td class="freeze-col freeze-col-1 text-center font-bold text-slate-500">${index + 1}</td>
@@ -421,16 +451,25 @@ function renderTableRows(proj) {
             <td>
     <input
         type="text"
-        value='${escapeHtmlAttr(buildCompleteLineNo(line))}'
+        value='${escapeHtmlAttr(isDuplicateSeq ? "" : buildCompleteLineNo(line, proj.lines, index))}'
         readonly
         tabindex="-1"
         title="Complete Line No. dibuat otomatis dari Line Size, Process Fluid Identifier, Pipe.Spec, Seq. No. dan Insulation."
         class="complete-line-no w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/50 cursor-not-allowed"
     >
 </td>
-            <td><input type="text" value="${line.pid}" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
-            <td><input type="text" value="${line.from}" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
-            <td><input type="text" value="${line.to}" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
+            <td>
+                <textarea rows="1" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
+                    class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.pid)}">${escapeHtml(line.pid)}</textarea>
+            </td>
+            <td>
+                <textarea rows="1" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''}
+                    class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.from)}">${escapeHtml(line.from)}</textarea>
+            </td>
+            <td>
+                <textarea rows="1" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''}
+                    class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.to)}">${escapeHtml(line.to)}</textarea>
+            </td>
             <td><input type="text" value="${line.service}" onchange="updateLineField(${index}, 'service', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.phase}" onchange="updateLineField(${index}, 'phase', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.mass}" onchange="updateLineField(${index}, 'mass', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
@@ -498,16 +537,67 @@ function updateLineField(index, field, val) {
 
     line[field] = val;
 
-    // Complete Line No. selalu mengikuti field sumber dan tidak lagi diisi manual.
-    line.complete_no = buildCompleteLineNo(line);
+    const currentLines = projectsData[currentProjectIndex].lines;
 
-    // Jangan render ulang seluruh tabel saat user sedang mengisi sel.
-    // Render ulang di sini membuat fokus berpindah/hilang sehingga Tab/Enter
-    // terasa seperti harus klik mouse lagi. Cukup update nilai Complete Line No.
-    // pada baris yang sedang diedit.
-    const row = document.querySelector(`#lineTableBody tr[data-line-index="${index}"]`);
-    const completeInput = row ? row.querySelector('.complete-line-no') : null;
-    if (completeInput) completeInput.value = line.complete_no;
+    // Hanya baris yang sedang diedit yang ditandai merah saat duplikat.
+    if (field === 'seq') {
+        const normalized = String(val ?? '').replace(/\D/g, '').trim();
+        const duplicateLines = normalized
+            ? currentLines.filter((l, i) =>
+                i !== index && String(l.seq ?? '').replace(/\D/g, '').trim() === normalized)
+            : [];
+
+        const row = document.querySelector(`#lineTableBody tr[data-line-index="${index}"]`);
+        const seqInput = row ? row.querySelector('input[type="number"], input[inputmode="numeric"]') : null;
+
+        if (duplicateLines.length) {
+            // Tandai HANYA baris yang sedang diedit. Baris lama tetap normal.
+            duplicateSeqIndex = index;
+            if (row) row.classList.remove('duplicate-seq-row');
+            if (seqInput) {
+                seqInput.classList.add('duplicate-seq-input');
+                seqInput.title = `WARNING: Seq. No. ${normalized} sudah digunakan pada line lain. Mohon gunakan Seq. No. yang lain.`;
+            }
+            line.complete_no = '';
+            showModal('Duplikat Seq. No.', `Seq. No. ${normalized} sudah digunakan pada line lain. Mohon gunakan Seq. No. yang lain.`, 'warning');
+        } else {
+            if (duplicateSeqIndex === index) duplicateSeqIndex = null;
+            if (row) row.classList.remove('duplicate-seq-row');
+            if (seqInput) {
+                seqInput.classList.remove('duplicate-seq-input');
+                seqInput.title = '';
+            }
+        }
+    }
+
+    // Regenerasi Complete Line No hanya untuk baris yang valid.
+    currentLines.forEach((item, itemIndex) => {
+        if (itemIndex === duplicateSeqIndex) {
+            const s = String(item.seq ?? '').replace(/\D/g, '').trim();
+            const hasOtherSameSeq = s && currentLines.some((other, otherIndex) =>
+                otherIndex !== itemIndex && String(other.seq ?? '').replace(/\D/g, '').trim() === s
+            );
+            item.complete_no = hasOtherSameSeq ? '' : buildCompleteLineNo(item, currentLines, itemIndex);
+        } else if (item.complete_no === '' || field !== 'seq' || itemIndex === index) {
+            item.complete_no = buildCompleteLineNo(item, currentLines, itemIndex);
+        }
+    });
+
+    // Update hanya baris yang terlibat; tidak me-render ulang seluruh tabel.
+    document.querySelectorAll('#lineTableBody tr[data-line-index]').forEach(rowEl => {
+        const rowIndex = Number(rowEl.dataset.lineIndex);
+        const completeInput = rowEl.querySelector('.complete-line-no');
+        const seqInputEl = rowEl.querySelector('input[type="number"], input[inputmode="numeric"]');
+
+        // Tidak ada row merah. Hanya input Seq. No. yang sedang diedit.
+        rowEl.classList.remove('duplicate-seq-row');
+        const isCurrentDuplicate = rowIndex === duplicateSeqIndex;
+        if (seqInputEl) seqInputEl.classList.toggle('duplicate-seq-input', isCurrentDuplicate);
+
+        if (completeInput && currentLines[rowIndex]) {
+            completeInput.value = currentLines[rowIndex].complete_no || '';
+        }
+    });
 }
 
 function addLineRow() {
@@ -727,7 +817,10 @@ function handleExcelImport(e) {
                     line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
                     line.ins_thick = (line.ins_thick === '-' ? '' : String(line.ins_thick ?? '').replace(/[^0-9.]/g, ''));
                     line.seq = String(line.seq ?? '').replace(/\D/g, '');
-                    line.complete_no = buildCompleteLineNo(line);
+                    line.complete_no = '';
+                });
+                importedLines.forEach((line, index) => {
+                    line.complete_no = buildCompleteLineNo(line, importedLines, index);
                 });
 
                 projectsData[currentProjectIndex].lines = importedLines;
@@ -986,6 +1079,15 @@ function initLineTableKeyboardNavigation() {
     if (window.__lineTableKeyboardNavigationReady) return;
     window.__lineTableKeyboardNavigationReady = true;
 
+    const keepRowVerticallyVisible = (row) => {
+        const scroller = row?.closest('.line-list-scroll');
+        if (!scroller || !row) return;
+        const sr = scroller.getBoundingClientRect();
+        const rr = row.getBoundingClientRect();
+        if (rr.bottom > sr.bottom) scroller.scrollTop += rr.bottom - sr.bottom;
+        else if (rr.top < sr.top) scroller.scrollTop -= sr.top - rr.top;
+    };
+
     document.addEventListener('keydown', (event) => {
         const target = event.target;
         if (!target || !target.closest('#lineTableBody')) return;
@@ -1019,9 +1121,36 @@ function initLineTableKeyboardNavigation() {
                 all[nextPos].focus({ preventScroll: true });
                 all[nextPos].select?.();
                 const row = all[nextPos].closest('tr');
-                if (row) row.scrollIntoView({ block: 'nearest' });
+                if (row) keepRowVerticallyVisible(row);
             }
             return;
+        }
+
+        // Arrow Left / Right: berpindah ke kolom berikut/sebelumnya ketika
+        // caret sudah berada di batas kiri/kanan field. Ini terasa seperti
+        // navigasi Excel dan tetap membiarkan Left/Right mengedit teks normal.
+        if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') &&
+            (target.tagName === 'INPUT' || target.tagName === 'SELECT')) {
+            const start = typeof target.selectionStart === 'number' ? target.selectionStart : null;
+            const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : null;
+            const valueLength = String(target.value ?? '').length;
+            const atBoundary = target.tagName === 'SELECT' ||
+                (event.key === 'ArrowRight' ? (start === end && end === valueLength) : (start === end && start === 0));
+
+            if (atBoundary) {
+                const direction = event.key === 'ArrowRight' ? 1 : -1;
+                const nextRowCells = currentCells;
+                const nextIndex = currentColumn + direction;
+                const nextCell = nextRowCells[nextIndex];
+
+                if (nextCell) {
+                    event.preventDefault();
+                    nextCell.focus({ preventScroll: true });
+                    nextCell.select?.();
+                    revealCellHorizontally(nextCell);
+                    return;
+                }
+            }
         }
 
         // Enter / Arrow Up / Arrow Down: pertahankan kolom, pindah baris.
@@ -1043,9 +1172,214 @@ function initLineTableKeyboardNavigation() {
             event.preventDefault();
             nextCell.focus({ preventScroll: true });
             nextCell.select?.();
-            nextRow.scrollIntoView({ block: 'nearest' });
+            keepRowVerticallyVisible(nextRow);
         }
     });
 }
 
-initLineTableKeyboardNavigation();
+// =========================================================
+// AUTO-SCROLL DATA PANJANG
+// - Project name tidak bergerak otomatis.
+// - Sel input panjang mengikuti fokus/keyboard tanpa scrollbar kecil.
+// - P&ID / From / To menggunakan textarea agar bisa Enter/multi-line.
+// =========================================================
+function initProjectNameMarquee() {
+    // Nama project tidak dianimasikan. Teks dipusatkan dan ukuran font
+    // otomatis dikecilkan sampai seluruh nama muat di area yang tersedia.
+    const viewport = document.getElementById('projectNameViewport');
+    const input = document.getElementById('headerProjectName');
+    if (!viewport || !input) return;
+
+    const fit = () => {
+        const text = String(input.value || '');
+        const computed = window.getComputedStyle(input);
+        const fontWeight = computed.fontWeight || '800';
+        const fontFamily = computed.fontFamily || 'Arial, sans-serif';
+
+        // Beri ruang aman supaya teks tidak menempel pada sisi viewport.
+        const available = Math.max(40, viewport.clientWidth - 10);
+
+        const canvas = fit.__canvas || (fit.__canvas = document.createElement('canvas'));
+        const ctx = canvas.getContext('2d');
+
+        let size = 13;
+        const minSize = 8.5;
+        const letterSpacing = -0.15;
+
+        while (size > minSize) {
+            ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
+            const measured = ctx.measureText(text).width + Math.max(0, text.length - 1) * letterSpacing;
+            if (measured <= available) break;
+            size -= 0.25;
+        }
+
+        input.style.fontSize = `${Math.max(minSize, size)}px`;
+        input.style.letterSpacing = `${letterSpacing}px`;
+        input.style.textAlign = 'center';
+        input.style.width = '100%';
+        input.style.display = 'block';
+
+        viewport.style.justifyContent = 'center';
+        viewport.style.textAlign = 'center';
+        viewport.scrollLeft = 0;
+        input.scrollLeft = 0;
+    };
+
+    if (!window.__projectNameAutoFitReady) {
+        window.__projectNameAutoFitReady = true;
+        window.addEventListener('resize', () => requestAnimationFrame(fit));
+    }
+
+    requestAnimationFrame(fit);
+}
+
+function initLongContentAutoScroll() {
+    if (window.__longContentAutoScrollReady) return;
+    window.__longContentAutoScrollReady = true;
+
+    const autoGrowTextarea = (el) => {
+        if (!el || el.tagName !== 'TEXTAREA') return;
+        const hasMultiple = String(el.value || '').includes('\n');
+        el.classList.toggle('has-multiple-lines', hasMultiple);
+        if (hasMultiple) {
+            el.style.height = 'auto';
+            el.style.height = Math.max(30, Math.min(el.scrollHeight, 120)) + 'px';
+        } else {
+            el.style.height = '30px';
+        }
+    };
+
+    // Scroll tabel utama berdasarkan posisi kolom, bukan getBoundingClientRect().
+    // Ini penting karena kolom freeze menggunakan position: sticky.
+    // Target P&ID / From / To akan selalu masuk penuh ke area setelah freeze.
+    const revealCellHorizontally = (el) => {
+        const scroller = el?.closest('.line-list-scroll');
+        const cell = el?.closest('td, th');
+        if (!scroller || !cell) return;
+
+        const frozen = cell.classList.contains('freeze-col') ||
+                       cell.classList.contains('freeze-insulation');
+        if (frozen) return;
+
+        const table = cell.closest('table');
+        if (!table) return;
+
+        const cells = Array.from(cell.parentElement.children);
+        const columnIndex = cell.cellIndex;
+        if (columnIndex < 0) return;
+
+        // Ambil lebar kolom dari colgroup agar tidak terpengaruh sticky position.
+        const colgroup = table.querySelector('colgroup');
+        const cols = colgroup ? Array.from(colgroup.children) : [];
+        let targetLeft = 0;
+        let targetWidth = cell.getBoundingClientRect().width;
+        for (let i = 0; i < columnIndex; i++) {
+            const col = cols[i];
+            targetLeft += col ? col.getBoundingClientRect().width : (cells[i]?.getBoundingClientRect().width || 0);
+        }
+        if (cols[columnIndex]) {
+            targetWidth = cols[columnIndex].getBoundingClientRect().width;
+        }
+
+        // Freeze = No + Line Size + Fluid + Spec + Seq + Insulation Type + Thickness.
+        let frozenWidth = 0;
+        for (let i = 0; i < 7; i++) {
+            const col = cols[i];
+            frozenWidth += col ? col.getBoundingClientRect().width : 0;
+        }
+
+        const visibleRight = scroller.clientWidth;
+        const currentScroll = scroller.scrollLeft;
+        const targetVisibleLeft = targetLeft - currentScroll;
+        const targetVisibleRight = targetVisibleLeft + targetWidth;
+        const gap = 8;
+
+        // Jika target berada di bawah/menempel area freeze, geser ke kiri.
+        if (targetVisibleLeft < frozenWidth + gap) {
+            scroller.scrollLeft = Math.max(0, targetLeft - frozenWidth - gap);
+            return;
+        }
+
+        // Jika target terpotong di kanan, geser secukupnya agar seluruh kolom terlihat.
+        if (targetVisibleRight > visibleRight - gap) {
+            scroller.scrollLeft = Math.max(0, targetLeft + targetWidth - visibleRight + gap);
+        }
+    };
+
+    document.addEventListener('focusin', (event) => {
+        const el = event.target;
+        if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
+
+        if (el.id === 'headerProjectName') {
+            return;
+        }
+
+        revealCellHorizontally(el);
+        if (el.tagName === 'TEXTAREA') autoGrowTextarea(el);
+        // Jangan memaksa teks panjang ke ujung kanan. Biarkan browser mengikuti
+        // posisi caret/kursor pengguna agar isi tidak terasa "meloncat".
+        requestAnimationFrame(() => {
+            try {
+                if (typeof el.selectionStart === 'number') {
+                    el.scrollLeft = Math.max(0, el.scrollLeft);
+                }
+            } catch (_) {}
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        const el = event.target;
+        if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
+
+        // Tab/Shift+Tab: browser memindahkan fokus, lalu focusin menjalankan reveal.
+        // Enter pada P&ID/From/To tetap membuat baris baru.
+        if (el.id === 'headerProjectName' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            // readonly input tetap dapat discroll dengan caret keyboard.
+            requestAnimationFrame(() => {
+                el.scrollLeft = event.key === 'Home' ? 0 : event.key === 'End' ? el.scrollWidth : el.scrollLeft;
+            });
+        }
+    });
+
+    document.addEventListener('input', (event) => {
+        const el = event.target;
+        if (!el) return;
+        if (el.tagName === 'TEXTAREA' && el.classList.contains('multi-line-cell')) {
+            autoGrowTextarea(el);
+            } else if (el.tagName === 'INPUT') {
+            // Saat mengetik nilai panjang, tampilkan bagian paling akhir.
+            }
+    });
+
+    document.addEventListener('mouseenter', (event) => {
+        const el = event.target;
+        if (!el) return;
+
+        if (el.id === 'headerProjectName') return;
+
+        if (el.matches?.('.excel-table td input, .excel-table td textarea')) {
+            revealCellHorizontally(el);
+        }
+    }, true);
+
+    // Pastikan P&ID / From / To yang sudah tersimpan dengan Enter tampil penuh
+    // tanpa mengubah isi datanya.
+    document.querySelectorAll('.multi-line-cell').forEach(autoGrowTextarea);
+}
+
+
+// Final initialization for automatic horizontal reveal of long data.
+document.addEventListener("DOMContentLoaded", () => {
+    initLineTableKeyboardNavigation();
+    initLongContentAutoScroll();
+    initProjectNameMarquee();
+});
+
+// Nama Project: klik area nama untuk fokus navigasi keyboard tanpa mengedit nilainya.
+document.addEventListener('click', (event) => {
+    const viewport = document.getElementById('projectNameViewport');
+    if (!viewport) return;
+    if (event.target.closest('#projectNameViewport')) {
+        viewport.focus({ preventScroll: true });
+    }
+});

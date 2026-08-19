@@ -71,7 +71,7 @@ body {
     border-bottom: 1px solid #cbd5e1;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     vertical-align: middle;
 }
 
@@ -93,7 +93,7 @@ body {
     text-align: center;
     vertical-align: middle;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
 }
 
 /* =========================================================
@@ -228,7 +228,7 @@ body {
 /* Jangan biarkan teks panjang mendorong kolom lain. */
 .excel-table td input {
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
 }
 
 .line-list-scroll::-webkit-scrollbar {
@@ -277,4 +277,183 @@ body {
 
 .excel-table th.size-filter-cell input {
     background-image: none !important;
+}
+
+
+/* =========================================================
+   REVISI: DATA PANJANG + DUPLIKAT SEQ NO.
+   ========================================================= */
+.excel-table td input,
+.excel-table td textarea {
+    white-space: nowrap;
+}
+
+.excel-table td textarea.multi-line-cell {
+    resize: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-height: 30px;
+    line-height: 18px;
+    white-space: pre-wrap;
+    word-break: normal;
+}
+
+.excel-table td textarea.multi-line-cell:focus {
+    min-height: 54px;
+    height: 54px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    z-index: 250;
+    position: relative;
+}
+
+
+.excel-table input.duplicate-seq-input {
+    border: 2px solid #ef4444 !important;
+    background-color: #fee2e2 !important;
+    color: #b91c1c !important;
+    font-weight: 700;
+}
+
+/* =========================================================
+   NAMA PROJECT
+   - Tidak dianimasikan.
+   - Teks dimulai tepat setelah label.
+   - Ukuran font otomatis menyesuaikan agar seluruh nama project terlihat.
+   ========================================================= */
+.project-name-viewport {
+    position: relative;
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 560px;
+    min-width: 0;
+    overflow: hidden;
+    border-bottom: 1px dashed #cbd5e1;
+    min-height: 31px;
+    display: flex;
+    align-items: center;
+    justify-content: center !important;
+    text-align: center !important;
+    outline: none;
+    padding: 0 5px;
+}
+.project-name-value {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+    text-overflow: clip !important;
+    overflow: hidden !important;
+    border-bottom: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    flex: 1 1 auto;
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    letter-spacing: -0.15px;
+}
+.project-name-viewport:focus-visible {
+    box-shadow: inset 0 -2px 0 #2563eb;
+}
+
+/* Semua input text: satu baris, bisa digeser horizontal untuk melihat seluruh nilai. */
+.excel-table td input[type="text"],
+.excel-table td input[type="number"],
+.excel-table td input[inputmode="numeric"] {
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    scrollbar-width: none !important;
+}
+
+/* P&ID, From, To: Enter = baris baru; teks panjang tidak wrap sendiri. */
+.excel-table td textarea.multi-line-cell {
+    resize: none;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
+    min-height: 30px;
+    height: 30px;
+    line-height: 18px;
+    white-space: pre !important;
+    word-break: normal;
+    overflow-wrap: normal;
+    text-overflow: clip;
+}
+.excel-table td textarea.multi-line-cell:focus {
+    position: relative;
+    z-index: 250;
+    min-height: 30px;
+    height: 30px;
+    white-space: pre !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
+}
+
+/* Tidak ada scrollbar kecil di dalam setiap input. Pergeseran teks panjang
+   mengikuti caret/kursor keyboard (Left/Right), seperti input biasa. */
+.excel-table td input::-webkit-scrollbar,
+.excel-table td textarea::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}
+.excel-table td input,
+.excel-table td textarea {
+    scrollbar-width: none !important;
+    text-overflow: clip !important;
+}
+
+/* Bila memang ada beberapa baris, textarea membesar secukupnya. */
+.excel-table td textarea.multi-line-cell.has-multiple-lines {
+    height: auto;
+    min-height: 30px;
+    overflow-y: auto !important;
+    white-space: pre !important;
+}
+
+/* Tetap pertahankan freeze saat horizontal scroll. */
+.excel-table .freeze-col,
+.excel-table .freeze-insulation {
+    z-index: 30;
+}
+.excel-table thead .freeze-col {
+    z-index: 130;
+}
+.excel-table thead tr.filter-row .freeze-col {
+    z-index: 140;
+}
+
+/* Final mentor revision: no mini horizontal scrollbars inside cells.
+   Long values are revealed by the main table auto-scroll and keyboard caret. */
+.excel-table td input,
+.excel-table td textarea {
+    scrollbar-width: none !important;
+}
+.excel-table td input::-webkit-scrollbar,
+.excel-table td textarea::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+.excel-table td textarea.multi-line-cell {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+/* FINAL MENTOR FIX: horizontal navigation is handled by the main table
+   scrollbar + keyboard focus. Never show a scrollbar inside individual cells. */
+.excel-table td input,
+.excel-table td textarea,
+.excel-table td select {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.excel-table td input,
+.excel-table td textarea {
+    text-overflow: clip !important;
 }
