@@ -79,6 +79,22 @@ let currentProjectIndex = 0;
 let currentProject = 0; // Menyesuaikan acuan untuk updateProjectDropdownOptions
 let tableFilters = {};
 
+// Sinkronkan Complete Line No. lama dengan format otomatis saat aplikasi pertama kali dibuka.
+// Tidak mengubah data sumber selain membentuk field Complete Line No. dari kolom sumbernya.
+projectsData.forEach(project => {
+    project.lines.forEach(line => {
+        line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
+        if (line.ins_thick === '-' || line.ins_thick === null || line.ins_thick === undefined) {
+            line.ins_thick = '';
+        } else {
+            line.ins_thick = String(line.ins_thick).replace(/[^0-9.]/g, '');
+        }
+        line.seq = String(line.seq ?? '').replace(/\D/g, '');
+        line.spec = String(line.spec ?? '').trim().toUpperCase();
+        line.complete_no = buildCompleteLineNo(line);
+    });
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     // Event Listener untuk Form Login
     const loginForm = document.getElementById('loginForm');
@@ -310,12 +326,35 @@ const LINE_SIZE_OPTIONS = [
 ];
 
 /**
- * Hanya memperbaiki simbol inch pada Complete Line No.
- * Contoh: 8''-CP-B1-190016 -> 8"-CP-B1-190016
- * Isi lainnya tidak diubah.
+ * Complete Line No. dibuat OTOMATIS dari data line.
+ * Format utama: 8"-CP-B1-190016
+ * Jika insulation terisi: 2"-LS-B1-190303-IH-40
  */
 function normalizeCompleteLineNo(value) {
     return String(value ?? "").replace(/''/g, '"');
+}
+
+function buildCompleteLineNo(line) {
+    const size = String(line?.size ?? "").trim().replace(/["']+$/g, "");
+    const fluid = String(line?.fluid_id ?? "").trim().toUpperCase();
+    const spec = String(line?.spec ?? "").trim().toUpperCase();
+    const seq = String(line?.seq ?? "").replace(/\D/g, "").trim();
+
+    // Complete Line No. baru dibuat setelah komponen wajib tersedia.
+    if (!size || !fluid || !spec || !seq) return "";
+
+    let result = `${size}"-${fluid}-${spec}-${seq}`;
+    const insType = String(line?.ins_type ?? "").trim().toUpperCase();
+    const insThick = String(line?.ins_thick ?? "").trim();
+
+    if (insType && insType !== "-") {
+        result += `-${insType}`;
+        if (insThick && insThick !== "-" && /^\d+(?:[.,]\d+)?$/.test(insThick)) {
+            result += `-${insThick.replace(',', '.')}`;
+        }
+    }
+
+    return result;
 }
 
 function escapeHtmlAttr(value) {
@@ -373,18 +412,19 @@ function renderTableRows(proj) {
             <td class="freeze-col freeze-col-2">${renderLineSizeSelect(line, index, canEdit)}</td>
             <td class="freeze-col freeze-col-3"><input type="text" value="${line.fluid_id}" onchange="updateLineField(${index}, 'fluid_id', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
             <td class="freeze-col freeze-col-4"><input type="text" value="${line.spec}" onchange="updateLineField(${index}, 'spec', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
-            <td class="freeze-col freeze-col-5"><input type="text" value="${line.seq}" onchange="updateLineField(${index}, 'seq', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
+            <td class="freeze-col freeze-col-5"><input type="number" min="0" step="1" inputmode="numeric" value="${String(line.seq ?? '').replace(/\D/g, '')}" oninput="this.value=this.value.replace(/\D/g,'')" onchange="updateLineField(${index}, 'seq', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
-            <td class="freeze-col freeze-col-6"><input type="text" value="${line.ins_type}" onchange="updateLineField(${index}, 'ins_type', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
-            <td class="freeze-col freeze-col-7"><input type="text" value="${line.ins_thick}" onchange="updateLineField(${index}, 'ins_thick', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
+            <td class="freeze-col freeze-col-6"><input type="text" value="${escapeHtmlAttr(line.ins_type)}" oninput="this.value=this.value.toUpperCase()" onchange="updateLineField(${index}, 'ins_type', this.value.toUpperCase())" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
+            <td class="freeze-col freeze-col-7"><input type="number" min="0" step="any" inputmode="decimal" value="${String(line.ins_thick ?? '').replace(/[^0-9.]/g, '')}" oninput="this.value=this.value.replace(/[^0-9.]/g,'')" onchange="updateLineField(${index}, 'ins_thick', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
             <td>
     <input
         type="text"
-        value='${escapeHtmlAttr(normalizeCompleteLineNo(line.complete_no))}'
-        onchange="updateLineField(${index}, 'complete_no', normalizeCompleteLineNo(this.value))"
-        ${!canEdit ? 'disabled' : ''}
-        class="w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/30"
+        value='${escapeHtmlAttr(buildCompleteLineNo(line))}'
+        readonly
+        tabindex="-1"
+        title="Complete Line No. dibuat otomatis dari Line Size, Process Fluid Identifier, Pipe.Spec, Seq. No. dan Insulation."
+        class="w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/50 cursor-not-allowed"
     >
 </td>
             <td><input type="text" value="${line.pid}" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
@@ -441,7 +481,25 @@ function renderTableRows(proj) {
 }
 
 function updateLineField(index, field, val) {
-    projectsData[currentProjectIndex].lines[index][field] = val;
+    const line = projectsData[currentProjectIndex].lines[index];
+
+    if (field === 'seq') {
+        val = String(val ?? '').replace(/\D/g, '');
+    }
+
+    if (field === 'ins_type') {
+        val = String(val ?? '').toUpperCase();
+    }
+
+    if (field === 'ins_thick') {
+        val = String(val ?? '').replace(/[^0-9.]/g, '');
+    }
+
+    line[field] = val;
+
+    // Complete Line No. selalu mengikuti field sumber dan tidak lagi diisi manual.
+    line.complete_no = buildCompleteLineNo(line);
+
     renderDashboard();
 }
 
@@ -657,6 +715,13 @@ function handleExcelImport(e) {
                     remarks: String(row["Remarks"] || "-"),
                     processApproval: "Pending"
                 }));
+
+                importedLines.forEach(line => {
+                    line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
+                    line.ins_thick = (line.ins_thick === '-' ? '' : String(line.ins_thick ?? '').replace(/[^0-9.]/g, ''));
+                    line.seq = String(line.seq ?? '').replace(/\D/g, '');
+                    line.complete_no = buildCompleteLineNo(line);
+                });
 
                 projectsData[currentProjectIndex].lines = importedLines;
                 renderDashboard();
