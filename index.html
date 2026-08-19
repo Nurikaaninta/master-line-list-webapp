@@ -1,625 +1,659 @@
 <!DOCTYPE html>
-<html lang="id" class="h-full">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MASTER LINE LIST WEBAPP - Tripatra</title>
-    <!-- Tailwind CSS -->
+    <title>BMBQ WebApp - Tripatra Engineering Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS (XLSX) untuk Membaca & Export File Excel -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <!-- jsPDF & AutoTable untuk Ekspor PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <!-- FontAwesome Icons -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- External Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="h-full font-sans text-slate-800 antialiased bg-slate-950 flex items-center justify-center min-h-screen">
+<body class="bg-slate-50 text-slate-800 font-sans antialiased" x-data="appData()">
 
-    <!-- ========================================== -->
-    <!-- HALAMAN LOGIN                              -->
-    <!-- ========================================== -->
-    <div id="loginPage" class="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-800 overflow-hidden m-4">
-        <div class="bg-emerald-600 p-6 text-center border-b border-slate-800 relative">
-            <div class="flex justify-center items-center space-x-3 mb-2">
-                <div class="bg-white px-3 py-1.5 rounded shadow flex items-center justify-center">
-                    <img src="tripatra-logo.png" alt="Tripatra" onerror="this.onerror=null;this.src='tripatra-logo.png'" class="h-8 w-auto object-contain">
+    <!-- HALAMAN LOGIN -->
+    <div x-show="!isLoggedIn" x-cloak class="min-h-screen flex items-center justify-center bg-white px-4">
+        <div class="max-w-md w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-8 space-y-6">
+            <div class="text-center space-y-3">
+                <div class="inline-flex items-center justify-center w-64 h-36 mb-1">
+                    <img src="logo tripatra.png" alt="Logo Tripatra" class="max-h-32 w-auto object-contain">
                 </div>
+                <h1 class="text-base font-bold text-slate-900 tracking-wide">BMBQ WebApp</h1>
             </div>
-            <h1 class="text-lg font-extrabold text-white tracking-wide">MASTER LINE LIST WEBAPP</h1>
-        </div>
 
-        <div class="p-6">
-            <form id="loginForm" class="space-y-4">
+            <div x-show="loginError" x-cloak class="p-3 bg-rose-50 border border-rose-200 text-rose-600 text-xs rounded-xl text-center" x-text="loginErrorMsg"></div>
+
+            <form @submit.prevent="login" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Email</label>
-                    <div class="relative">
-                        <i class="fa-solid fa-envelope absolute left-3 top-3 text-slate-400 text-xs"></i>
-                        <input type="email" id="loginEmail" required class="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500" value="process@piping.com">
-                    </div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Email</label>
+                    <input type="email" x-model="loginForm.user" required class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-[#82C341] focus:bg-white focus:outline-none transition" placeholder="engineer@tripatra.com">
                 </div>
-
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                    <div class="relative">
-                        <i class="fa-solid fa-key absolute left-3 top-3 text-slate-400 text-xs"></i>
-                        <input type="password" id="loginPassword" required class="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500" value="pass123">
-                    </div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+                    <input type="password" x-model="loginForm.pass" required class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-[#82C341] focus:bg-white focus:outline-none transition" placeholder="••••••••">
                 </div>
-
-                <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md text-xs transition shadow-sm">
-                    <i class="fa-solid fa-right-to-bracket mr-1"></i> LOGIN
+                <button type="submit" style="background-color: #82C341;" class="w-full py-3 hover:opacity-90 text-white font-semibold rounded-xl transition text-xs shadow-lg shadow-[#82C341]/20 mt-2">
+                    Login
                 </button>
             </form>
         </div>
     </div>
 
-    <!-- Modal Tambah Project Baru -->
-    <div id="addProjectModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 border border-slate-300 space-y-4">
-            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b pb-3">
-                <i class="fa-solid fa-folder-plus text-emerald-600"></i> Tambah Project Baru
-            </h4>
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Nama Project / Fasilitas</label>
-                    <input type="text" id="newProjectNameInput" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500 uppercase" placeholder="CONTOH: CENTRAL GAS PLANT PROJECT">
-                </div>
-                <div class="flex space-x-2 pt-2">
-                    <button type="button" onclick="closeAddProjectModal()" class="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded text-xs">Batal</button>
-                    <button type="button" onclick="saveNewProject()" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-xs">Simpan & Pilih</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- HALAMAN STUDIO TABEL UTAMA + DASHBOARD UI  -->
-    <!-- ========================================== -->
-    <div id="dashboardPage" class="hidden w-full h-screen overflow-hidden bg-slate-900 flex">
+     <!-- HALAMAN DASHBOARD / WORKSPACE UTAMA -->
+    <div x-show="isLoggedIn" x-cloak class="min-h-screen flex bg-slate-100">
         
-        <!-- SIDEBAR NAVIGASI MENU -->
-        <aside id="appSidebar" class="w-64 bg-[#111C44] text-slate-300 flex flex-col transition-all duration-300 relative shadow-xl border-r border-slate-800 shrink-0">
-            <div class="p-4 flex items-center justify-between border-b border-blue-900">
-                <div id="sidebarBrandContainer" class="flex items-center gap-3 overflow-hidden">
-                    <div class="bg-white px-3 py-1.5 rounded-lg flex items-center justify-center shadow-xs shrink-0">
-                        <img src="tripatra-logo.png" alt="Tripatra" onerror="this.onerror=null;this.src='tripatra-logo.png'" class="h-8 w-auto object-contain">
-                    </div>
-                    <div class="sidebar-text truncate">
-                        <h1 class="text-white font-bold text-sm tracking-wide">MASTER LINE LIST</h1>
-                        <p class="text-[10px] text-slate-400 uppercase tracking-wider">WEBAPP</p>
+        <!-- SIDEBAR NAVIGASI KIRI -->
+        <aside id="appSidebar" class="w-64 bg-[#111C44] text-slate-300 flex flex-col transition-all duration-300 relative shadow-xl border-r border-slate-800 shrink-0 sticky top-0 h-screen z-50">
+            
+            <!-- LOGO TRIPATRA DI SIDEBAR (DIPERBESAR) -->
+            <div class="sidebar-brand p-4 flex items-center justify-between border-b border-blue-900">
+                <div id="sidebarBrandContainer" class="flex items-center gap-3 overflow-hidden w-full transition-all duration-300">
+                    <!-- Ukuran logo diubah menjadi w-12 h-12 (atau w-14 h-14 jika ingin lebih besar lagi) -->
+                    <img src="logo tripatra.png" alt="Tripatra Logo" class="logo-img w-12 h-12 object-contain shrink-0">
+                    <div class="sidebar-text truncate transition-opacity duration-200">
+                        <h1 class="text-white font-bold text-base tracking-wide leading-tight">Tripatra</h1>
+                        <p class="text-[11px] text-slate-400 uppercase tracking-wider">Engineering Studio</p>
                     </div>
                 </div>
-                <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-blue-900/60 text-slate-300 transition" title="Buka/Tutup Menu">
+                <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-blue-900/60 text-slate-300 transition cursor-pointer shrink-0" title="Buka/Tutup Menu">
                     <i class="fa-solid fa-bars text-base"></i>
                 </button>
             </div>
-
-            <!-- Bagian Menu Navigasi Sidebar yang Diperbarui -->
+            <!-- MENU UTAMA -->
             <nav class="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto text-xs">
-                
-                <!-- Bagian "Currently Managing" di Sidebar (Tepat di atas Dashboard Overview) -->
-                <div class="px-0 mb-4 relative" id="sidebarProjectContainer">
-                    <div class="text-[11px] text-slate-400 font-medium mb-1 sidebar-text">
-                        Currently Managing:
-                    </div>
+                <span class="sidebar-text text-[10px] uppercase font-bold tracking-wider text-slate-500 px-2 mb-1 block">Menu Utama</span>
 
-                    <!-- Tombol Dropdown Utama -->
-                    <button onclick="toggleSidebarProjectDropdown()" id="currentProjectBtn" class="flex items-center justify-between w-full text-left py-1.5 px-2 bg-slate-900/60 border border-slate-700/60 rounded-lg hover:bg-slate-800 transition">
-                        <span id="activeProjectText" class="text-xs font-bold text-blue-400 truncate pr-2 sidebar-text">
-                            CPO STORAGE & TRANSFER FACILITY (DATA 1)
+                <!-- DASHBOARD HOME -->
+                <button @click="currentDashboardTab = 'home'" :class="currentDashboardTab === 'home' ? 'bg-[#82C341] text-white font-semibold' : 'hover:bg-blue-900/50 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition">
+                    <i class="fa-solid fa-house text-base shrink-0 w-4 text-center"></i>
+                    <span class="sidebar-text text-xs font-medium">Dashboard Home</span>
+                </button>
+
+                <!-- CREATE PROJECT: TEPAT DI BAWAH DASHBOARD HOME -->
+                <div class="relative mt-1" x-data="{ openDropdown: false }">
+                    <button @click="openDropdown = !openDropdown" type="button" class="sidebar-menu-btn w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-white hover:border-slate-500 shadow-sm transition">
+                        <span class="flex items-center space-x-3 min-w-0">
+                            <i class="fa-solid fa-folder-plus text-base shrink-0 w-4 text-center"></i>
+                            <span class="sidebar-text text-xs font-medium">Create Project</span>
                         </span>
-                        <i id="dropdownChevron" class="fa-solid fa-chevron-down text-[10px] text-blue-400 transition-transform"></i>
+                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition-transform duration-200 shrink-0" :class="openDropdown ? 'rotate-180' : ''"></i>
                     </button>
 
-                    <!-- Panel Dropdown List Proyek -->
-                    <div id="sidebarProjectDropdownMenu" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden text-xs py-1">
-                        
-                        <!-- Daftar Proyek Dinamis -->
-                        <div id="dropdownProjectList" class="max-h-40 overflow-y-auto">
-                            <!-- Item proyek akan dimuat secara otomatis di sini -->
+                    <!-- CREATE NEW PROJECT + PROJECT LIST -->
+                    <div x-show="openDropdown" @click.away="openDropdown = false" x-cloak class="mt-1 ml-3 mr-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden py-1 text-xs">
+                        <div @click="openCreateProjectModal(); openDropdown = false;" class="px-3.5 py-2.5 text-[#82C341] hover:bg-slate-800 cursor-pointer font-bold flex items-center space-x-2 border-b border-slate-800">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Create New Project</span>
                         </div>
 
-                        <!-- Garis Pemisah -->
-                        <div class="my-1 border-t border-slate-700"></div>
-
-                        <!-- Opsi Tambah Proyek Baru -->
-                        <button onclick="openAddProjectModal(); closeSidebarProjectDropdown();" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-slate-800 transition font-medium">
-                            + Add New Project...
-                        </button>
+                        <template x-for="projKey in Object.keys(allProjectsData)" :key="projKey">
+                            <div @click="activeProject = projKey; switchProject(); openDropdown = false;"
+                                 class="px-3.5 py-2.5 hover:bg-slate-800 cursor-pointer text-slate-300 hover:text-white transition"
+                                 :class="activeProject === projKey ? 'bg-slate-800/60 text-[#82C341] font-semibold' : ''">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-semibold" x-text="projKey"></span>
+                                    <i x-show="activeProject === projKey" class="fa-solid fa-check text-[10px] text-[#82C341]"></i>
+                                </div>
+                                <span class="block mt-0.5 text-[9px] text-slate-500 truncate"
+                                      x-text="allProjectsData[projKey]?.meta?.projectName || 'Piping & Equipment'"></span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
-                <!-- Tombol Dashboard Overview -->
-                <button id="menuBtnOverview" onclick="switchDashboardTab('overview')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-table-cells-large text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">Dashboard Overview</span>
+                <!-- MTO PIPE & FITTING VALVE -->
+                <button @click="openDataSheet('Valve')" :class="currentDashboardTab === 'workspace' && !['SP Items', 'Support', 'LineList'].includes(activeSheet) ? 'bg-[#82C341] text-white font-semibold' : 'hover:bg-blue-900/50 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 pl-9 pr-3 py-2.5 rounded-lg transition mt-1">
+                    <i class="fa-solid fa-table-cells text-base shrink-0 w-4 text-center"></i>
+                    <span class="sidebar-text text-xs font-medium">MTO Pipe &amp; Fitting Valve</span>
                 </button>
 
-                <!-- Tombol Project Studio & Line List -->
-                <button id="menuBtnStudio" onclick="switchDashboardTab('studio')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-diagram-project text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">Project Studio & Line List</span>
+                <!-- SUBMENU MTO -->
+                <div class="mt-1 pl-3 space-y-1 border-l border-blue-900/70 ml-3">
+                    <button @click="openDataSheet('SP Items')" :class="activeSheet === 'SP Items' && currentDashboardTab === 'workspace' ? 'bg-[#82C341]/20 text-[#82C341]' : 'hover:bg-blue-900/40 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+                        <i class="fa-solid fa-cubes text-base w-4 text-center shrink-0"></i><span class="sidebar-text text-xs font-medium">SP Items</span>
+                    </button>
+                    <button @click="openDataSheet('Support')" :class="activeSheet === 'Support' && currentDashboardTab === 'workspace' ? 'bg-[#82C341]/20 text-[#82C341]' : 'hover:bg-blue-900/40 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+                        <i class="fa-solid fa-layer-group text-base w-4 text-center shrink-0"></i><span class="sidebar-text text-xs font-medium">Pipe Support</span>
+                    </button>
+                    <button @click="openDataSheet('LineList')" :class="activeSheet === 'LineList' && currentDashboardTab === 'workspace' ? 'bg-[#82C341]/20 text-[#82C341]' : 'hover:bg-blue-900/40 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-left">
+                        <i class="fa-solid fa-route text-base w-4 text-center shrink-0"></i><span class="sidebar-text text-xs font-medium">Line List</span>
+                    </button>
+                </div>
+
+                <!-- CALCULATE BOM: MENU UTAMA, DI LUAR CREATE PROJECT -->
+                <button x-show="loginForm.role === 'Piping Engineer'" @click="openCalculateBOM()" :class="showBomModal ? 'bg-[#82C341] text-white font-semibold' : 'hover:bg-blue-900/50 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition mt-1">
+                    <i class="fa-solid fa-calculator text-base shrink-0 w-4 text-center"></i>
+                    <span class="sidebar-text text-xs font-medium">Calculate BOM</span>
                 </button>
 
-                <!-- Tombol P&ID / Documents -->
-                <button id="menuBtnDocuments" onclick="switchDashboardTab('documents')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-file-pdf text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">P&ID / Documents</span>
+                <template x-if="loginForm.role === 'Piping Engineer' && workflowStatus === 'APPROVED'">
+                    <button @click="startNewRevision()"
+                        class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-amber-900/40 text-amber-200">
+                        <i class="fa-solid fa-rotate text-base shrink-0 w-4 text-center"></i>
+                        <span class="sidebar-text text-xs font-medium">Mulai Revisi Baru</span>
+                    </button>
+                </template>
+
+                <!-- TASKS & APPROVALS -->
+                <button @click="currentDashboardTab = 'tasks'" :class="currentDashboardTab === 'tasks' ? 'bg-[#82C341] text-white font-semibold' : 'hover:bg-blue-900/50 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition">
+                    <i class="fa-solid fa-list-check text-base shrink-0 w-4 text-center"></i>
+                    <span class="sidebar-text text-xs font-medium">Tasks &amp; Approvals</span>
                 </button>
 
-                <!-- Tombol My Discipline Tasks -->
-                <button id="menuBtnTasks" onclick="switchDashboardTab('tasks')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-list-check text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">My Discipline Tasks</span>
-                </button>
-
-                <!-- Tombol Team & Roles -->
-                <button id="menuBtnTeam" onclick="switchDashboardTab('team')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-users text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">Team & Roles (8)</span>
-                </button>
-
-                <!-- Tombol Settings & Account -->
-                <button id="menuBtnSettings" onclick="switchDashboardTab('settings')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-gear text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">Settings & Account</span>
+                <!-- USER PROFILE -->
+                <button @click="currentDashboardTab = 'profile'" :class="currentDashboardTab === 'profile' ? 'bg-[#82C341] text-white font-semibold' : 'hover:bg-blue-900/50 text-slate-300'" class="sidebar-menu-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition">
+                    <i class="fa-solid fa-user text-base shrink-0 w-4 text-center"></i>
+                    <span class="sidebar-text text-xs font-medium">User Profile</span>
                 </button>
             </nav>
 
-            <div class="p-4 border-t border-blue-900 flex items-center justify-between">
-                <div class="flex items-center gap-3 overflow-hidden">
-                    <div class="w-9 h-9 rounded-full bg-blue-900/80 flex items-center justify-center text-blue-200 border border-blue-700 shrink-0">
-                        <i class="fa-solid fa-user text-sm"></i>
-                    </div>
-                    <div class="overflow-hidden sidebar-text">
-                        <p id="sidebarUserName" class="text-sm font-bold text-white truncate"></p>
-                        <p id="sidebarUserRole" class="text-xs text-blue-300 truncate"></p>
-                    </div>
-                </div>
-            </div>
-            <div class="px-4 pb-4">
-                <button id="logoutBtn" onclick="handleLogout()" class="w-full py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-200 border border-rose-800/60 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-right-from-bracket"></i> <span class="sidebar-text">Logout</span>
+            <div class="p-3 mt-auto border-t border-blue-900">
+                <button @click="logout" class="w-full px-3 py-2 rounded-xl bg-blue-900/40 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center space-x-3 transition text-xs">
+                    <i class="fa-solid fa-power-off w-4 text-center shrink-0"></i>
+                    <span class="sidebar-text">Keluar Workspace</span>
                 </button>
             </div>
         </aside>
 
-        <!-- AREA KONTEN UTAMA DASHBOARD -->
-        <div class="flex-1 flex flex-col h-full overflow-hidden bg-slate-100">
-            <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 shadow-xs">
-                <!-- Breadcrumb & Info Halaman -->
-                <div class="flex items-center space-x-2">
-                    <p class="text-[11px] text-slate-500 font-medium">Home / Dashboard / <span id="breadcrumbProject" class="text-slate-800 font-bold">AGPA Refinery Complex</span></p>
-                </div>
-
-                <!-- Bagian Kanan Header (Search & Notification) -->
+        <!-- KONTEN UTAMA -->
+        <div class="flex-1 flex flex-col min-h-screen">
+            
+            <header class="bg-white border-b border-slate-200 h-16 px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm">
                 <div class="flex items-center space-x-3">
-                    <div class="relative">
-                        <input type="text" id="searchInput" placeholder="Search Studio..." class="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-blue-500 w-56">
-                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                    <div class="w-9 h-9 rounded-full bg-emerald-100 text-[#82C341] flex items-center justify-center font-bold text-xs">
+                        <i class="fa-solid fa-user"></i>
                     </div>
-                    <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition">
-                        <i class="fa-solid fa-bell text-xs"></i>
-                    </button>
+                    <div>
+                        <span class="text-xs font-bold text-slate-800 block" x-text="loginForm.user"></span>
+                        <span class="text-[10px] text-[#82C341] font-semibold uppercase tracking-wider" x-text="'Peran: ' + loginForm.role"></span>
+                    </div>
                 </div>
+                <div></div>
             </header>
 
-            <main class="flex-1 p-6 overflow-y-auto space-y-6">
-                
-                <!-- ================= TAB 1: DASHBOARD OVERVIEW ================= -->
-                <div id="tabContentOverview" class="space-y-6 hidden">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                            <p class="text-xs font-bold text-slate-500">Overall Progress</p>
-                            <h3 class="text-2xl font-black text-slate-900 mt-1">85%</h3>
-                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
-                                <div class="bg-emerald-500 h-full w-[85%]"></div>
-                            </div>
+            <main class="flex-1 p-6 space-y-6 overflow-y-auto">
+
+                <!-- 1. DASHBOARD HOME -->
+                <div x-show="currentDashboardTab === 'home'" class="space-y-6">
+                    <div class="bg-[#82C341] rounded-2xl p-6 text-white shadow-md relative overflow-hidden flex items-center justify-between">
+                        <div class="space-y-1 z-10">
+                            <h1 class="text-xl md:text-2xl font-extrabold tracking-wide">
+                                Sugeng Rawuh 🙏🏻
+                            </h1>
+                            <p class="text-xs text-white/90">Proyek Aktif Saat Ini: <span class="font-bold underline" x-text="activeProject"></span></p>
                         </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                            <p class="text-xs font-bold text-slate-500">Active Documents</p>
-                            <h3 id="ovActiveDocs" class="text-2xl font-black text-slate-900 mt-1">3</h3>
-                            <p class="text-[10px] text-blue-600 font-bold mt-1"><i class="fa-solid fa-file-lines"></i> P&ID & Line Lists</p>
-                        </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                            <p class="text-xs font-bold text-slate-500">Pending Tasks</p>
-                            <h3 class="text-2xl font-black text-slate-900 mt-1">5</h3>
-                            <p class="text-[10px] text-amber-600 font-bold mt-1"><i class="fa-solid fa-clock"></i> Requires review</p>
-                        </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                            <p class="text-xs font-bold text-slate-500">Team Members</p>
-                            <h3 class="text-2xl font-black text-slate-900 mt-1">8</h3>
-                            <p class="text-[10px] text-emerald-600 font-bold mt-1"><i class="fa-solid fa-users"></i> All disciplines active</p>
+                        <div class="hidden md:block opacity-30 text-7xl absolute right-6">
+                            <i class="fa-solid fa-chart-line"></i>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b pb-3">
-                                <i class="fa-solid fa-chart-line text-blue-600"></i> Project Progress Summary
-                            </h4>
-                            <div class="space-y-3 text-xs">
-                                <div>
-                                    <div class="flex justify-between font-semibold mb-1"><span>Process Engineering & Line List</span><span>95%</span></div>
-                                    <div class="w-full bg-slate-100 h-2 rounded-full"><div class="bg-blue-600 h-full w-[95%] rounded-full"></div></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between font-semibold mb-1"><span>P&ID Verification</span><span>80%</span></div>
-                                    <div class="w-full bg-slate-100 h-2 rounded-full"><div class="bg-emerald-500 h-full w-[80%] rounded-full"></div></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between font-semibold mb-1"><span>Stress Analysis & Support</span><span>70%</span></div>
-                                    <div class="w-full bg-slate-100 h-2 rounded-full"><div class="bg-amber-500 h-full w-[70%] rounded-full"></div></div>
-                                </div>
-                            </div>
+                    <!-- KEUNTUNGAN APLIKASI -->
+                    <div class="space-y-3">
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Keuntungan Aplikasi</h3>
+                            <p class="text-[11px] text-slate-500 mt-1">Manfaat utama BMBQ WebApp dalam membantu proses pengelolaan data piping dan equipment.</p>
                         </div>
 
-                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b pb-3">
-                                <i class="fa-solid fa-bell text-amber-500"></i> Recent Activities & Notifications
-                            </h4>
-                            <div class="space-y-3 text-xs">
-                                <div class="flex items-start gap-3 p-2 bg-slate-50 rounded-lg">
-                                    <div class="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-stamp"></i></div>
-                                    <div>
-                                        <p class="font-bold text-slate-800">Lead Process Engineer menyetujui baris pipa CPO</p>
-                                        <p class="text-[10px] text-slate-500">Hari ini, 10:42 AM</p>
-                                    </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            <div class="dashboard-benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-[#82C341] flex items-center justify-center">
+                                    <i class="fa-solid fa-database"></i>
                                 </div>
-                                <div class="flex items-start gap-3 p-2 bg-slate-50 rounded-lg">
-                                    <div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-file-excel"></i></div>
-                                    <div>
-                                        <p class="font-bold text-slate-800">Impor Excel Line List berhasil disinkronisasi</p>
-                                        <p class="text-[10px] text-slate-500">Kemarin, 15:20 PM</p>
-                                    </div>
+                                <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded">DATA TERPUSAT</span>
+                                <h4 class="text-sm font-bold text-slate-800">Data lebih terorganisir</h4>
+                                <p class="text-[11px] text-slate-500 leading-relaxed">Data MTO, SP Items, Pipe Support, LineList, dan Equipment dikelola dalam satu workspace per proyek sehingga lebih mudah dicari dan diperbarui.</p>
+                            </div>
+
+                            <div class="dashboard-benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-clock"></i>
                                 </div>
+                                <span class="px-2 py-0.5 bg-sky-50 text-sky-700 text-[10px] font-bold rounded">EFISIENSI WAKTU</span>
+                                <h4 class="text-sm font-bold text-slate-800">Pekerjaan lebih cepat</h4>
+                                <p class="text-[11px] text-slate-500 leading-relaxed">Import Excel, pencarian data, pagination, freeze column, dan export mengurangi pekerjaan manual serta mempermudah pengolahan data engineering.</p>
+                            </div>
+
+                            <div class="dashboard-benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-circle-check"></i>
+                                </div>
+                                <span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded">KONTROL DATA</span>
+                                <h4 class="text-sm font-bold text-slate-800">Data lebih mudah dikontrol</h4>
+                                <p class="text-[11px] text-slate-500 leading-relaxed">Pembagian role Piping Engineer, Estimator Proposal, dan Lead Estimator membantu mengatur proses input, review, kalkulasi, dan approval.</p>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- ================= TAB 2: PROJECT STUDIO & LINE LIST ================= -->
-                <div id="tabContentStudio" class="space-y-6">
-                    <!-- Baris Pengelolaan Project & Tombol Aksi -->
-                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hidden">
-                        <div class="flex items-center space-x-3 flex-wrap gap-2">
-                            <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 shadow-xs relative z-10">
-                                <i class="fa-solid fa-layer-group text-blue-600 text-xs"></i>
-                                <span class="text-xs font-bold text-slate-700">Currently Managing:</span>
-                                <select id="headerProjectSwitcher" onchange="handleProjectSwitcherChange(this)" class="bg-transparent text-xs font-bold text-blue-700 focus:outline-none cursor-pointer">
-                                    <!-- Opsi project & Add Project akan di-generate otomatis oleh JS -->
-                                </select>
-                            </div>
+                    <!-- KELEBIHAN APLIKASI -->
+                    <div class="space-y-3">
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Kelebihan Aplikasi</h3>
+                            <p class="text-[11px] text-slate-500 mt-1">Fitur utama yang membuat BMBQ WebApp lebih praktis untuk pekerjaan engineering.</p>
                         </div>
 
-                        <div class="flex items-center space-x-2 flex-wrap gap-2">
-                            <label class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-sm flex items-center space-x-1.5">
-                                <i class="fa-solid fa-file-excel"></i>
-                                <span>Import Excel</span>
-                                <input type="file" id="excelFileInputTop" accept=".xlsx, .xls, .csv" class="hidden">
-                            </label>
-                            <button id="exportExcelTopBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 cursor-pointer">
-                                <i class="fa-solid fa-download"></i>
-                                <span>Export Excel</span>
-                            </button>
-                            <button onclick="openPdfModal()" class="px-3 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 cursor-pointer">
-                                <i class="fa-solid fa-file-pdf"></i>
-                                <span>Export PDF</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- KONTEN UTAMA: SPREADSHEET LINE LIST -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
-                        <div class="bg-white border-b border-slate-200 p-6">
-                            <div class="flex flex-col md:flex-row items-center justify-between w-full gap-6">
-                                <div class="flex flex-col justify-center items-center w-48 shrink-0 relative group">
-                                    <div id="leftLogoContainer" class="w-full h-16 flex items-center justify-center cursor-pointer relative overflow-hidden">
-                                        <span id="leftLogoPlaceholder" class="text-3xl font-black text-blue-600 tracking-tighter leading-none">ARC<span class="text-cyan-400">●</span></span>
-                                        <img id="leftLogoImg" class="hidden max-h-14 max-w-full object-contain" alt="Logo Klien">
-                                        <label id="leftLogoUploadBtn" title="Ubah logo (Admin)" class="hidden absolute inset-0 bg-black/40 text-white items-center justify-center cursor-pointer transition opacity-0 group-hover:opacity-100">
-                                            <i class="fa-solid fa-pen text-xs bg-blue-600 p-1.5 rounded-full shadow"></i>
-                                            <input type="file" id="leftLogoInput" accept="image/*" class="hidden" onchange="uploadLogo(event, 'left')">
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col items-center justify-center flex-1 text-center space-y-2.5 w-full">
-                                    <div class="flex flex-col sm:flex-row items-center justify-center gap-2 text-sm font-bold text-slate-800 w-full">
-                                        <span class="uppercase text-[11px] font-semibold text-slate-500 w-36 text-right shrink-0">NAMA PROJECT:</span>
-                                        <div id="projectNameViewport" class="project-name-viewport" tabindex="0" aria-label="Nama Project">
-                                            <input type="text" id="headerProjectName" readonly value="AGPA REFINERY COMPLEX"
-                                                title="Nama project" class="project-name-value px-3 py-1 font-black text-slate-900 text-sm border-b border-dashed border-slate-300 bg-transparent text-center focus:outline-none transition">
-                                        </div>
-                                    </div>
-                                    <div class="flex flex-col sm:flex-row items-center justify-center gap-2 text-sm font-bold text-slate-800 w-full">
-                                        <span class="uppercase text-[11px] font-semibold text-slate-500 w-36 text-right">DOCUMENT NUMBER:</span>
-                                        <input type="text" id="headerDocNumber" disabled value="E2401-100-A1001" 
-                                            class="px-3 py-1 font-mono font-black text-slate-900 text-sm border-b border-dashed border-slate-300 bg-transparent text-center focus:border-blue-600 focus:outline-none w-full sm:w-80 transition">
-                                    </div>
-                                    <div id="headerRevStatusContainer" class="flex flex-wrap items-center justify-center gap-6 text-xs font-bold text-slate-800 w-full mt-1"></div>
-                                </div>
-
-                                <div class="flex flex-col justify-center items-center w-48 shrink-0 relative group">
-                                    <div id="rightLogoContainer" class="w-full h-16 flex items-center justify-center cursor-pointer relative overflow-hidden">
-                                        <div id="rightLogoPlaceholder" class="hidden"></div>
-                                        <img id="rightLogoImg" src="tripatra-logo.png" onerror="this.onerror=null;this.src='tripatra-logo.png'" class="max-h-14 max-w-full object-contain" alt="Logo Tripatra">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="line-list-scroll flex-1 overflow-auto bg-white relative max-h-[500px]" data-freeze-columns="7" aria-label="Line List table with frozen columns through Insulation Section">
-                            <table class="w-max min-w-full text-[11px] text-slate-800 whitespace-nowrap excel-table">
-<colgroup class="line-list-colgroup">
-    <col class="c-no"><col class="c-size"><col class="c-fluid"><col class="c-spec"><col class="c-seq">
-    <col class="c-ins-type"><col class="c-ins-thick"><col class="c-complete"><col class="c-pid">
-    <col class="c-from"><col class="c-to"><col class="c-service"><col class="c-phase"><col class="c-mass">
-    <col class="c-vol"><col class="c-press"><col class="c-press"><col class="c-temp"><col class="c-temp">
-    <col class="c-density"><col class="c-visc"><col class="c-nde"><col class="c-nde"><col class="c-test-med">
-    <col class="c-test-press"><col class="c-painting"><col class="c-pwht"><col class="c-stress">
-    <col class="c-stress-calc"><col class="c-remarks"><col class="c-approval"><col class="c-action">
-</colgroup>
-<thead class="sticky top-0 z-20 shadow-xs">
-                                    <tr>
-                                        <th rowspan="2" class="freeze-col freeze-col-1 w-10">No</th>
-                                        <th rowspan="2" class="freeze-col freeze-col-2 line-size-header">Line Size (Inch)</th>
-                                        <th rowspan="2" class="freeze-col freeze-col-3">Process Fluid Identifier</th>
-                                        <th rowspan="2" class="freeze-col freeze-col-4">Pipe.Spec</th>
-                                        <th rowspan="2" class="freeze-col freeze-col-5">Seq. No</th>
-                                        <th colspan="2" class="freeze-insulation">Insulation Section</th>
-                                        <th rowspan="2">Complete Line No.</th>
-                                        <th rowspan="2">P&ID No</th>
-                                        <th rowspan="2">From</th>
-                                        <th rowspan="2">To</th>
-                                        <th rowspan="2">Fluid Service</th>
-                                        <th rowspan="2">Phase</th>
-                                        <th rowspan="2">Mass Flow [kg/h]</th>
-                                        <th rowspan="2">Volume Flow [m3/h]</th>
-                                        <th colspan="2" class="bg-slate-200">Pressure [Barg]</th>
-                                        <th colspan="2" class="bg-slate-200">Temperature [°C]</th>
-                                        <th rowspan="2">Density [kg/m³]</th>
-                                        <th rowspan="2">Viscosity [cP]</th>
-                                        <th colspan="2" class="bg-emerald-100">NDE</th>
-                                        <th colspan="2" class="bg-emerald-100">Pressure Test</th>
-                                        <th rowspan="2">Painting Code</th>
-                                        <th rowspan="2" class="bg-amber-50 text-amber-900">PWHT</th>
-                                        <th rowspan="2" class="bg-amber-50 text-amber-900">Stress Analysis Criticality</th>
-                                        <th rowspan="2" class="bg-amber-50 text-amber-900">Stress Analysis Calculation Number</th>
-                                        <th rowspan="2">Remarks</th>
-                                        <th id="thProcessApproval" rowspan="2" class="bg-amber-100 text-amber-900 w-24">Process Approval</th>
-                                        <th rowspan="2" class="w-16">Aksi</th>
-                                    </tr>
-                                    <tr>
-                                        <th class="freeze-col freeze-col-6">Type</th>
-                                        <th class="freeze-col freeze-col-7">Thickness [mm]</th>
-                                        <th class="bg-slate-100">Operating</th>
-                                        <th class="bg-slate-100">Design</th>
-                                        <th class="bg-slate-100">Operating</th>
-                                        <th class="bg-slate-100">Design</th>
-                                        <th class="bg-emerald-50">RT</th>
-                                        <th class="bg-emerald-50">PT/MT</th>
-                                        <th class="bg-emerald-50">Medium</th>
-                                        <th class="bg-emerald-50">Pressure [Barg]</th>
-                                    </tr>
-                                    <tr class="bg-gray-100 filter-row">
-                                        <th class="freeze-col freeze-col-1"></th>
-                                        <th class="freeze-col freeze-col-2 size-filter-cell"><input type="text" oninput="filterByColumn('size', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th class="freeze-col freeze-col-3"><input type="text" oninput="filterByColumn('fluid_id', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th class="freeze-col freeze-col-4"><input type="text" oninput="filterByColumn('spec', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th class="freeze-col freeze-col-5"><input type="text" oninput="filterByColumn('seq', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th class="freeze-col freeze-col-6"><input type="text" oninput="filterByColumn('ins_type', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th class="freeze-col freeze-col-7"><input type="text" oninput="filterByColumn('ins_thick', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('complete_no', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('pid', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('from', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('to', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('service', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('phase', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('mass', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('vol', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('press_op', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('press_des', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('temp_op', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('temp_des', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('density', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('visc', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('nde_rt', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('nde_pt', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('test_med', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('test_press', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('painting', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('pwht', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal bg-amber-50/50" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('stress_critical', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal bg-amber-50/50" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('stress_calc_no', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal bg-amber-50/50" placeholder="Cari..."></th>
-                                        <th><input type="text" oninput="filterByColumn('remarks', this.value)" class="w-full text-xs px-1 py-1 border rounded font-normal" placeholder="Cari..."></th>
-                                        <th id="thProcessApprovalFilter"></th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="lineTableBody" class="font-mono-data"></tbody>
-                            </table>
-                        </div>
-
-                        <div class="bg-slate-50 border-t border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-                            <div id="bottomActionArea" class="flex items-center space-x-2">
-                                <button id="addNewRowBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5">
-                                    <i class="fa-solid fa-plus"></i>
-                                    <span>Add Pipe Line</span>
-                                </button>
-                                <label class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-sm flex items-center space-x-1.5">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            <div class="dashboard-benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                                     <i class="fa-solid fa-file-excel"></i>
-                                    <span>Import Excel</span>
-                                    <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden">
+                                </div>
+                                <span class="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded">IMPORT & EXPORT</span>
+                                <h4 class="text-sm font-bold text-slate-800">Terintegrasi dengan Excel</h4>
+                                <p class="text-[11px] text-slate-500 leading-relaxed">Data dari Excel dapat diimpor ke sheet proyek dan hasil pengolahan dapat diekspor kembali ke Excel maupun PDF.</p>
+                            </div>
+
+                            <div class="dashboard-benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-table-columns"></i>
+                                </div>
+                                <span class="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded">DATA TABLE</span>
+                                <h4 class="text-sm font-bold text-slate-800">Tabel lebih nyaman digunakan</h4>
+                                <p class="text-[11px] text-slate-500 leading-relaxed">Freeze kolom penting, scroll horizontal dan vertikal, pencarian, serta pagination membantu saat bekerja dengan data yang banyak.</p>
+                            </div>
+
+                            <div class="dashboard-benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-user-shield"></i>
+                                </div>
+                                <span class="px-2 py-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold rounded">ROLE & WORKFLOW</span>
+                                <h4 class="text-sm font-bold text-slate-800">Hak akses sesuai peran</h4>
+                                <p class="text-[11px] text-slate-500 leading-relaxed">Setiap peran memiliki fokus kerja yang berbeda sehingga proses input, estimasi, review, dan approval dapat dilakukan lebih terarah.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. HALAMAN WORKSPACE / MTO SUITE -->
+                <div x-show="currentDashboardTab === 'workspace'" class="space-y-4">
+                    <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div class="flex items-center space-x-3 w-full md:w-auto">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[#82C341]">
+                                <i class="fa-solid fa-user-shield text-sm"></i>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-400 uppercase font-semibold">Dashboard & Fokus Peran:</span>
+                                <div class="text-xs font-bold text-slate-800" x-text="getRoleFocusText()"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-2 w-full md:w-auto justify-end flex-wrap gap-2">
+                            <template x-if="loginForm.role === 'Estimator Proposal'">
+                                <button @click="generateBOQ"
+                                    class="px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow"
+                                    :class="workflowStatus === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
+                                    <i class="fa-solid text-[10px]" :class="workflowStatus === 'APPROVED' ? 'fa-file-pdf' : 'fa-calculator'"></i>
+                                    <span x-text="workflowStatus === 'APPROVED' ? 'Lihat Laporan Final' : 'Kalkulasi Biaya BOQ'"></span>
+                                </button>
+                            </template>
+
+                            <template x-if="loginForm.role === 'Lead Estimator'">
+                                <button @click="approveData"
+                                    class="px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow"
+                                    :class="workflowStatus === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-sky-600 hover:bg-sky-700 text-white'">
+                                    <i class="fa-solid text-[10px]" :class="workflowStatus === 'APPROVED' ? 'fa-file-pdf' : 'fa-check-double'"></i>
+                                    <span x-text="workflowStatus === 'APPROVED' ? 'Lihat Laporan Final' : 'Approval & Review Laporan'"></span>
+                                </button>
+                            </template>
+
+                            <div class="h-6 w-px bg-slate-200 mx-1"></div>
+
+                            <label class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-amber-700 border border-slate-200 rounded-xl text-xs font-semibold transition flex items-center space-x-1 cursor-pointer">
+                                <i class="fa-solid fa-file-arrow-up"></i><span>Import Excel</span>
+                                <input type="file" accept=".xlsx, .xls" class="hidden" @change="importExcelFile($event)">
+                            </label>
+
+                            <div class="relative" x-data="{ exportOpen: false }">
+                                <button @click="exportOpen = !exportOpen" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#82C341] border border-slate-200 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
+                                    <i class="fa-solid fa-file-export"></i><span>Export</span><i class="fa-solid fa-chevron-down text-[9px]"></i>
+                                </button>
+                                <div x-show="exportOpen" @click.away="exportOpen = false" x-cloak class="absolute right-0 mt-1.5 w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1">
+                                    <button @click="exportExcel(); exportOpen = false" class="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-emerald-50 rounded-lg flex items-center gap-2"><i class="fa-solid fa-file-excel text-emerald-600"></i> Excel</button>
+                                    <button @click="printPDF(); exportOpen = false" class="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-rose-50 rounded-lg flex items-center gap-2"><i class="fa-solid fa-file-pdf text-rose-600"></i> PDF</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TABEL DATA -->
+                    <div class="workspace-table-card bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
+                        <div class="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                            <div class="flex items-center space-x-3 flex-wrap gap-2">
+                                <span class="text-xs font-bold text-slate-800" x-text="'Proyek: ' + activeProject + ' | Sheet: ' + activeSheet"></span>
+                                <span class="bg-slate-100 border border-slate-300 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold" x-text="getProjectVersion()"></span>
+                                <span class="px-2 py-0.5 rounded-md border text-[10px] font-bold" :class="workflowStatusClass" x-text="workflowStatusText"></span>
+
+                                <div class="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                                    <span class="text-[10px] font-semibold text-slate-500">Progress:</span>
+                                    <select x-model="allProjectsData[activeProject].meta.progress" @change="saveStorage" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+                                        <option value="0%">0%</option>
+                                        <option value="30%">30%</option>
+                                        <option value="50%">50%</option>
+                                        <option value="90%">90%</option>
+                                        <option value="100%">100%</option>
+                                    </select>
+                                </div>
+
+                                <template x-if="allProjectsData[activeProject]?.meta?.isApproved">
+                                    <span class="bg-emerald-100 border border-emerald-300 text-[#82C341] px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center space-x-1">
+                                        <i class="fa-solid fa-circle-check"></i>
+                                        <span x-text="'Approved (' + allProjectsData[activeProject].meta.approvedAt + ')'"></span>
+                                    </span>
+                                </template>
+                                <template x-if="!allProjectsData[activeProject]?.meta?.isApproved">
+                                    <span class="bg-amber-100 border border-amber-300 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-semibold">
+                                        Pending Review
+                                    </span>
+                                </template>
+                            </div>
+                            <div class="relative w-72">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                    <i class="fa-solid fa-search text-xs"></i>
+                                </span>
+                                <input type="text" x-model="globalSearch" placeholder="Cari data spesifikasi / material..." class="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#82C341]">
+                            </div>
+                        </div>
+
+                        <!-- KONTEN TABEL DENGAN CUSTOM SCROLLBAR -->
+                        <div class="excel-table-container custom-scrollbar" x-ref="tableScroll" @scroll="syncTableBottomScroll($event)" :key="'table-container-' + tableRenderKey">
+                            <table class="excel-table" :key="'table-' + tableRenderKey">
+                                <thead>
+                                    <tr>
+                                        <th :class="getNoFreezeClass()" style="min-width: 55px; width: 55px;">No</th>
+
+                                        <template x-for="col in currentColumns" :key="tableRenderKey + '-head-' + col">
+                                            <th :class="getFreezeClass(col)" :title="col" style="min-width: 130px;">
+                                                <div class="filter-header-content">
+                                                    <span x-text="col"></span>
+                                                    <button type="button"
+                                                            class="column-filter-btn"
+                                                            :class="{ 'is-active': isColumnFiltered(col) }"
+                                                            @click.stop="openColumnFilter(col, $event)"
+                                                            :title="'Filter ' + col">
+                                                        <i class="fa-solid fa-filter"></i>
+                                                    </button>
+                                                </div>
+                                            </th>
+                                        </template>
+
+                                        <th x-show="loginForm.role === 'Piping Engineer'" style="min-width: 100px;">Aksi</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    <template x-for="(row, index) in (addingNewData ? [...paginatedRows, newInlineRow] : paginatedRows)" :key="tableRenderKey + '-row-' + index">
+                                        <tr :class="{'inline-new-row': row.__inlineDraft}">
+                                            <td class="font-mono text-[#82C341] font-semibold text-center"
+                                                :class="getNoFreezeClass()"
+                                                style="min-width: 55px; width: 55px;"
+                                                x-text="getRowNumber(row, index)">
+                                            </td>
+
+                                            <template x-for="col in currentColumns" :key="tableRenderKey + '-cell-' + index + '-' + col">
+                                                <td :class="getFreezeClass(col)" style="min-width: 130px;">
+                                                    <input type="text"
+                                                           x-model="row[col]"
+                                                           :disabled="loginForm.role !== 'Piping Engineer'"
+                                                           @change="markRowEdited(row)"
+                                                           class="excel-input text-center">
+                                                </td>
+                                            </template>
+
+                                            <td class="text-center" x-show="loginForm.role === 'Piping Engineer'" style="min-width: 100px;">
+                                                <template x-if="addingNewData && row.__inlineDraft">
+                                                    <div class="flex items-center justify-center gap-1">
+                                                        <button @click="saveInlineAdd()" class="px-2 py-1 bg-[#82C341] hover:opacity-90 text-white rounded-lg text-[10px] font-semibold transition" title="Simpan data">
+                                                            <i class="fa-solid fa-check"></i>
+                                                        </button>
+                                                        <button @click="cancelInlineAdd()" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-semibold transition" title="Batal">
+                                                            <i class="fa-solid fa-xmark"></i>
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!row.__inlineDraft">
+                                                    <button @click="deleteRow(index)" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-600 rounded-lg text-[10px] transition" title="Hapus Baris">
+                                                        <i class="fa-solid fa-trash-can"></i>
+                                                    </button>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- SCROLLBAR HORIZONTAL KHUSUS TABEL -->
+                        <div class="table-bottom-scrollbar" x-ref="tableBottomScrollbar" @scroll="syncBottomTableScroll($event)" aria-label="Geser tabel ke kanan dan kiri">
+                            <div class="table-bottom-scrollbar-spacer" x-ref="tableBottomScrollbarSpacer"></div>
+                        </div>
+
+                        <!-- POPUP FILTER KOLOM GAYA EXCEL -->
+                        <div x-cloak
+                             x-show="filterPopupOpen"
+                             x-transition
+                             class="column-filter-popup"
+                             :style="`left:${filterPopupPosition.left}px; top:${filterPopupPosition.top}px;`"
+                             @click.stop
+                             @click.outside="closeColumnFilter()"
+                             @keydown.escape.window="closeColumnFilter()">
+
+                            <div class="column-filter-popup-header">
+                                <div class="min-w-0">
+                                    <div class="column-filter-popup-title">Filter</div>
+                                    <div class="column-filter-popup-column" x-text="activeFilterColumn"></div>
+                                </div>
+                                <button type="button" class="column-filter-close" @click="closeColumnFilter()" title="Tutup">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+
+                            <div class="column-filter-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text"
+                                       x-model="filterOptionSearch"
+                                       placeholder="Search"
+                                       autocomplete="off">
+                            </div>
+
+                            <div class="column-filter-actions">
+                                <label class="column-filter-check-all">
+                                    <input type="checkbox"
+                                           :checked="allFilterValuesSelected"
+                                           @change="toggleAllFilterValues()">
+                                    <span>(Select All)</span>
                                 </label>
-                                <div class="relative" id="exportMenuWrapper">
-                                    <button id="exportMenuBtn" type="button" onclick="toggleExportMenu()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 cursor-pointer">
-                                        <i class="fa-solid fa-download"></i>
-                                        <span>Export</span>
-                                        <i class="fa-solid fa-chevron-down text-[9px] ml-1"></i>
-                                    </button>
-                                    <div id="exportMenu" class="hidden absolute bottom-full left-0 mb-2 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                                        <button type="button" onclick="exportToExcel(); closeExportMenu();" class="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-emerald-50 flex items-center gap-2">
-                                            <i class="fa-solid fa-file-excel text-emerald-600"></i> Excel
-                                        </button>
-                                        <button type="button" onclick="openPdfModal(); closeExportMenu();" class="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-emerald-50 flex items-center gap-2 border-t border-slate-100">
-                                            <i class="fa-solid fa-file-pdf text-emerald-600"></i> PDF
-                                        </button>
-                                    </div>
+                                <span class="column-filter-count"
+                                      x-text="`${filterDraftValues.length} dipilih`"></span>
+                            </div>
+
+                            <div class="column-filter-options">
+                                <template x-if="filteredFilterOptions.length === 0">
+                                    <div class="column-filter-empty">Tidak ada nilai yang cocok.</div>
+                                </template>
+
+                                <template x-for="value in filteredFilterOptions" :key="'filter-option-' + activeFilterColumn + '-' + value">
+                                    <label class="column-filter-option">
+                                        <input type="checkbox"
+                                               :value="value"
+                                               x-model="filterDraftValues">
+                                        <span x-text="filterDisplayValue(value)"></span>
+                                    </label>
+                                </template>
+
+                                <div x-show="filteredFilterOptions.length >= 300" class="column-filter-limit">
+                                    Gunakan Search untuk menemukan nilai lainnya.
                                 </div>
                             </div>
 
-                            <div id="managerApprovalArea" class="flex items-center space-x-3 hidden">
-                                <span class="text-xs text-slate-600 font-medium">Semua baris telah di-approve Process Engineer. Siap untuk Final AFC Approval?</span>
-                                <button id="managerFinalApproveBtn" onclick="managerFinalApproval()" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5">
-                                    <i class="fa-solid fa-stamp"></i>
-                                    <span>Project Manager: Final Approve (AFC)</span>
+                            <div class="column-filter-footer">
+                                <button type="button"
+                                        class="column-filter-reset"
+                                        @click="clearColumnFilter()">
+                                    Clear Filter
                                 </button>
+                                <div class="column-filter-footer-right">
+                                    <button type="button"
+                                            class="column-filter-cancel"
+                                            @click="closeColumnFilter()">
+                                        Cancel
+                                    </button>
+                                    <button type="button"
+                                            class="column-filter-apply"
+                                            @click="applyColumnFilter()">
+                                        OK
+                                    </button>
+                                </div>
                             </div>
+                        </div>
+
+                        <!-- INFORMASI BARIS + TAMBAH DATA + PAGINATION -->
+                        <div class="p-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 text-xs text-slate-500">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <span class="whitespace-nowrap">Menampilkan Baris: <span class="text-slate-800 font-bold" x-text="filteredRows.length"></span> Data</span>
+                                <template x-if="loginForm.role === 'Piping Engineer'">
+                                    <button @click="openAddModalForActiveSheet()" style="background-color: #82C341;" class="px-3.5 py-2 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow hover:opacity-90 whitespace-nowrap">
+                                        <i class="fa-solid fa-plus text-[10px]"></i>
+                                        <span x-text="'Add data'"></span>
+                                    </button>
+                                </template>
+                                <template x-if="loginForm.role !== 'Piping Engineer'">
+                                    <span class="px-3 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-xl text-[10px] whitespace-nowrap">Tambah data hanya untuk Piping Engineer</span>
+                                </template>
+                            </div>
+                            <div class="flex items-center space-x-2 shrink-0">
+                                <button @click="if(currentPage > 1) currentPage--" class="px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition">Prev</button>
+                                <span class="px-2 font-mono" x-text="currentPage + ' / ' + maxPage"></span>
+                                <button @click="if(currentPage < maxPage) currentPage++" class="px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition">Next</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PILIHAN SHEET -->
+                    <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center space-x-2">
+                            <i class="fa-solid fa-table-cells text-[#82C341]"></i>
+                            <span>Navigasi Kategori Sheet Master Data (23 Kategori):</span>
+                        </div>
+                        <div class="flex overflow-x-auto space-x-2 pb-1 custom-scrollbar">
+                            <template x-for="sheet in sheets" :key="sheet">
+                                <button type="button" @click.stop="changeSheet(sheet)"
+                                    :style="activeSheet === sheet ? 'background-color: #82C341;' : ''"
+                                    :class="activeSheet === sheet ? 'text-white font-bold shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'"
+                                    class="px-3.5 py-2 rounded-xl text-xs whitespace-nowrap transition" x-text="sheet"></button>
+                            </template>
                         </div>
                     </div>
                 </div>
 
-                <!-- ================= TAB 3: P&ID / DOCUMENTS ================= -->
-                <div id="tabContentDocuments" class="space-y-6 hidden">
-                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                        <div class="flex justify-between items-center border-b pb-3">
-                            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                <i class="fa-solid fa-file-pdf text-rose-600"></i> Daftar Dokumen & P&ID Engineering
-                            </h4>
-                            <button onclick="showModal('Upload Dokumen', 'Fitur unggah dokumen teknik baru.', 'info')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold">Upload File</button>
+                <!-- 3. HALAMAN TASKS -->
+                <div x-show="currentDashboardTab === 'tasks'" class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <h2 class="text-base font-bold text-slate-800">Task Management & Approvals</h2>
+                    <p class="text-xs text-slate-500">Daftar tugas, persetujuan dokumen, dan riwayat keputusan untuk project aktif.</p>
+
+                    <div class="mt-4 space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-slate-200 pb-2">
+                            <button @click="openActiveTasks()"
+                                :class="taskView === 'active' ? 'bg-[#82C341] text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                class="px-3 py-1.5 rounded-lg text-xs font-bold transition">
+                                Tugas Aktif (<span x-text="activeTaskCount"></span>)
+                            </button>
+                            <button @click="openApprovalHistory()"
+                                :class="taskView === 'history' ? 'bg-[#82C341] text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition">
+                                Riwayat Selesai (<span x-text="projectApprovalHistory.length"></span>)
+                            </button>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-xs text-left border-collapse">
-                                <thead class="bg-slate-50 border-b">
-                                    <tr>
-                                        <th class="p-3">Nomor Dokumen</th>
-                                        <th class="p-3">Nama Dokumen / Fasilitas</th>
-                                        <th class="p-3">Revisi</th>
-                                        <th class="p-3">Status Persetujuan</th>
-                                        <th class="p-3 text-center">Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y">
-                                    <tr>
-                                        <td class="p-3 font-mono font-bold">B2401-190-A1501</td>
-                                        <td class="p-3">CPO Storage & Transfer Facility P&ID</td>
-                                        <td class="p-3">Rev 0 (AFC)</td>
-                                        <td class="p-3"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">Approved</span></td>
-                                        <td class="p-3 text-center"><button onclick="showModal('Pratinjau', 'Menampilkan pratinjau dokumen PDF.', 'info')" class="px-2 py-1 bg-slate-100 rounded text-slate-700"><i class="fa-solid fa-eye"></i> View</button></td>
-                                    </tr>
-                                    <tr>
-                                        <td class="p-3 font-mono font-bold">B2401-190-A1502</td>
-                                        <td class="p-3">Tank Farm Utility Distribution P&ID</td>
-                                        <td class="p-3">Rev B (IFI)</td>
-                                        <td class="p-3"><span class="px-2 py-0.5 bg-amber-100 text-amber-800 font-bold rounded">Pending Review</span></td>
-                                        <td class="p-3 text-center"><button onclick="showModal('Pratinjau', 'Menampilkan pratinjau dokumen PDF.', 'info')" class="px-2 py-1 bg-slate-100 rounded text-slate-700"><i class="fa-solid fa-eye"></i> View</button></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+
+                        <!-- TUGAS AKTIF -->
+                        <template x-if="taskView === 'active'">
+                            <div class="space-y-3">
+                                <div class="p-4 bg-sky-50/50 border border-sky-200 rounded-xl space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold text-sky-900">Status Project & Catatan Revisi Terakhir</span>
+                                        <span class="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded"
+                                              x-text="latestApproval ? getApprovalStatusText(latestApproval.status) : 'Menunggu'"></span>
+                                    </div>
+                                    <p class="text-xs text-slate-600"
+                                       x-text="latestApproval?.notes || allProjectsData[activeProject]?.meta?.revisionNotes || 'Belum ada catatan revisi yang tersimpan.'"></p>
+                                </div>
+
+                                <template x-if="activeTaskCount > 0">
+                                    <div class="p-4 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center justify-between gap-4">
+                                        <div class="space-y-1">
+                                            <div class="flex items-center space-x-2">
+                                                <span class="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">High Priority</span>
+                                                <span class="text-xs font-bold text-slate-800">Review MTO & Spesifikasi Valve Proyek Saat Ini</span>
+                                            </div>
+                                            <p class="text-[11px] text-slate-500">Periksa kembali data material take off (MTO) pada sheet Valve sebelum diserahkan ke Lead Estimator.</p>
+                                        </div>
+                                        <button type="button" @click="openTaskMTOValve()"
+                                            class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-semibold hover:bg-slate-700 whitespace-nowrap">
+                                            Kerjakan
+                                        </button>
+                                    </div>
+                                </template>
+
+                                <template x-if="activeTaskCount === 0">
+                                    <div class="p-8 text-center border border-dashed border-slate-300 rounded-xl bg-slate-50">
+                                        <i class="fa-solid fa-circle-check text-emerald-500 text-2xl mb-2"></i>
+                                        <p class="text-xs font-bold text-slate-700">Tidak ada tugas aktif</p>
+                                        <p class="text-[11px] text-slate-500 mt-1">Keputusan terakhir sudah masuk ke Riwayat Selesai.</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- RIWAYAT SELESAI -->
+                        <template x-if="taskView === 'history'">
+                            <div class="space-y-3">
+                                <template x-if="projectApprovalHistory.length > 0">
+                                    <div class="space-y-3">
+                                        <template x-for="item in [...projectApprovalHistory].reverse()" :key="item.id">
+                                            <div class="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
+                                                <div class="flex items-start justify-between gap-4">
+                                                    <div class="space-y-2 min-w-0">
+                                                        <div class="flex items-center gap-2 flex-wrap">
+                                                            <span class="px-2 py-0.5 text-[10px] font-bold rounded"
+                                                                  :class="getApprovalStatusClass(item.status)"
+                                                                  x-text="getApprovalStatusText(item.status)"></span>
+                                                            <span class="text-xs font-bold text-slate-800" x-text="item.title"></span>
+                                                        </div>
+                                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-[10px] text-slate-500">
+                                                            <div><span class="font-semibold text-slate-700">Project:</span> <span x-text="item.projectId"></span></div>
+                                                            <div><span class="font-semibold text-slate-700">Sheet:</span> <span x-text="item.sheet"></span></div>
+                                                            <div><span class="font-semibold text-slate-700">Revision:</span> Rev <span x-text="item.revision"></span></div>
+                                                            <div><span class="font-semibold text-slate-700">Reviewer:</span> <span x-text="item.reviewer"></span></div>
+                                                        </div>
+                                                        <p class="text-[10px] text-slate-400" x-text="item.timestamp"></p>
+                                                        <p x-show="item.notes" class="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-2" x-text="item.notes"></p>
+                                                    </div>
+                                                    <button @click="openApprovalDetail(item)" class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-[10px] font-semibold hover:bg-slate-700 whitespace-nowrap">Laporan PDF</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <template x-if="projectApprovalHistory.length === 0">
+                                    <div class="p-8 text-center border border-dashed border-slate-300 rounded-xl bg-slate-50">
+                                        <i class="fa-solid fa-clock-rotate-left text-slate-400 text-2xl mb-2"></i>
+                                        <p class="text-xs font-bold text-slate-700">Belum ada riwayat selesai</p>
+                                        <p class="text-[11px] text-slate-500 mt-1">Setelah Approve, Reject, atau Minta Revisi, keputusan akan muncul di sini.</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
-                <!-- ================= TAB 4: MY DISCIPLINE TASKS ================= -->
-                <div id="tabContentTasks" class="space-y-6 hidden">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                            <div class="flex justify-between items-center font-bold text-xs border-b pb-2">
-                                <span class="text-slate-600"><i class="fa-solid fa-circle text-amber-500 text-[8px] mr-1"></i> To Do</span>
-                                <span class="bg-slate-100 px-2 py-0.5 rounded">2</span>
-                            </div>
-                            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-xs">
-                                <p class="font-bold text-slate-800">Verifikasi NDE Line CPO-190</p>
-                                <p class="text-[10px] text-slate-500">Deadline: 12 Agu 2026 | Prioritas: Tinggi</p>
-                            </div>
+                <!-- 4. HALAMAN PROFILE -->
+                <div x-show="currentDashboardTab === 'profile'" class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
+                    <h2 class="text-base font-bold text-slate-800">User Profile & Settings</h2>
+                    <div class="space-y-3 text-xs text-slate-600">
+                        <div class="p-3 bg-slate-55 rounded-xl border border-slate-200">
+                            <b>Email Workspace:</b> <span x-text="loginForm.user"></span>
                         </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                            <div class="flex justify-between items-center font-bold text-xs border-b pb-2">
-                                <span class="text-blue-600"><i class="fa-solid fa-circle text-blue-500 text-[8px] mr-1"></i> In Progress</span>
-                                <span class="bg-slate-100 px-2 py-0.5 rounded">2</span>
-                            </div>
-                            <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-1 text-xs">
-                                <p class="font-bold text-slate-800">Update Spesifikasi Pipa Steam & Condensate</p>
-                                <p class="text-[10px] text-blue-600">Deadline: 15 Agu 2026 | Prioritas: Normal</p>
-                            </div>
-                        </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                            <div class="flex justify-between items-center font-bold text-xs border-b pb-2">
-                                <span class="text-emerald-600"><i class="fa-solid fa-circle text-emerald-500 text-[8px] mr-1"></i> Completed</span>
-                                <span class="bg-slate-100 px-2 py-0.5 rounded">4</span>
-                            </div>
-                            <div class="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-1 text-xs">
-                                <p class="font-bold text-slate-800">Review Kalkulasi Stress Analysis Tangki</p>
-                                <p class="text-[10px] text-emerald-600">Selesai | Disetujui Lead</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ================= TAB 5: TEAM & ROLES (8) ================= -->
-                <div id="tabContentTeam" class="space-y-6 hidden">
-                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                        <div class="flex justify-between items-center border-b pb-3">
-                            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                <i class="fa-solid fa-users text-blue-600"></i> Manajemen Tim Proyek & Hak Akses (8 Anggota)
-                            </h4>
-                            <button onclick="openAddAccountModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold">Tambah Anggota</button>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-xs text-left border-collapse">
-                                <thead class="bg-slate-50 border-b">
-                                    <tr>
-                                        <th class="p-3">Nama Anggota</th>
-                                        <th class="p-3">Email Disiplin</th>
-                                        <th class="p-3">Peran / Jabatan (Roles)</th>
-                                        <th class="p-3 text-center">Status Akses</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y">
-                                    <tr><td class="p-3 font-bold">Process Engineer</td><td class="p-3">process@piping.com</td><td class="p-3">Process Engineer (Originator)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">Lead Process</td><td class="p-3">leadprocess@piping.com</td><td class="p-3">Lead Process Engineer (Approver)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">Piping Engineer</td><td class="p-3">piping@piping.com</td><td class="p-3">Piping Engineer (Contributor)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">Lead Piping</td><td class="p-3">leadpiping@piping.com</td><td class="p-3">Lead Piping Engineer (Approver)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">Stress Engineer</td><td class="p-3">stress@piping.com</td><td class="p-3">Stress Engineer (Contributor)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">Designer Team</td><td class="p-3">designer@piping.com</td><td class="p-3">Designer (Originator)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">QA/QC Team</td><td class="p-3">qaqc@piping.com</td><td class="p-3">QA/QC & Material (Contributor)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                    <tr><td class="p-3 font-bold">Project Manager</td><td class="p-3">pm@piping.com</td><td class="p-3">Project Manager & Client (Approver)</td><td class="p-3 text-center"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Active</span></td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ================= TAB 6: SETTINGS & ACCOUNT ================= -->
-                <div id="tabContentSettings" class="space-y-6 hidden">
-                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs max-w-xl space-y-4">
-                        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b pb-3">
-                            <i class="fa-solid fa-gear text-slate-700"></i> Pengaturan Akun & Preferensi Aplikasi
-                        </h4>
-                        <div class="space-y-3 text-xs">
-                            <div>
-                                <label class="block font-bold text-slate-700 mb-1">Nama Profil</label>
-                                <input type="text" id="settingProfileName" class="w-full px-3 py-2 border rounded-md" value="Process Engineer">
-                            </div>
-                            <div>
-                                <label class="block font-bold text-slate-700 mb-1">Email Disiplin</label>
-                                <input type="email" id="settingProfileEmail" class="w-full px-3 py-2 border rounded-md" value="process@piping.com" disabled>
-                            </div>
-                            <div>
-                                <label class="block font-bold text-slate-700 mb-1">Ubah Password Baru</label>
-                                <input type="password" placeholder="Kosongkan jika tidak diubah" class="w-full px-3 py-2 border rounded-md">
-                            </div>
-                            <div class="flex items-center gap-2 pt-2">
-                                <input type="checkbox" id="notifEmail" checked class="rounded">
-                                <label for="notifEmail" class="font-medium text-slate-700">Terima Notifikasi Email untuk Review P&ID & Line List</label>
-                            </div>
-                            <button onclick="showModal('Berhasil', 'Pengaturan profil berhasil disimpan.', 'success')" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg">Simpan Perubahan</button>
+                        <div class="p-3 bg-slate-55 rounded-xl border border-slate-200">
+                            <b>Peran Aktif:</b> <span x-text="loginForm.role" class="text-[#82C341] font-bold"></span>
                         </div>
                     </div>
                 </div>
@@ -628,87 +662,918 @@
         </div>
     </div>
 
-    <!-- Modal Pengaturan PDF -->
-    <div id="pdfModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5 border border-slate-300 space-y-4">
-            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
-                <i class="fa-solid fa-file-pdf text-emerald-600"></i> Pengaturan Ekspor PDF
-            </h4>
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Ukuran Kertas</label>
-                <select id="pdfPageSize" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500 bg-white">
-                    <option value="a3" selected>A3 (Default - Lanskap)</option>
-                    <option value="a4">A4 (Lanskap)</option>
-                    <option value="letter">Letter (Lanskap)</option>
-                </select>
-            </div>
-            <div class="flex space-x-2 pt-2">
-                <button type="button" onclick="closePdfModal()" class="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded text-xs">Batal</button>
-                <button type="button" onclick="generatePDF()" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-xs">Download PDF</button>
-            </div>
-        </div>
-    </div>
+    <!-- MODAL CREATE PROJECT -->
+    <div x-show="showCreateProjectModal" x-cloak
+         class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4 py-6"
+         @keydown.escape.window="closeCreateProjectModal()">
+        <div class="create-project-modal bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden" @click.stop>
 
-    <!-- Modal Tambah Akun Baru -->
-    <div id="addAccountModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-300 space-y-4">
-            <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b pb-3">
-                <i class="fa-solid fa-user-plus text-blue-600"></i> Tambah Akun Baru (System Administrator)
-            </h4>
-            <form id="adminAddAccountForm" class="space-y-3">
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap / Panggilan</label>
-                    <input type="text" id="adminRegName" required class="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500" placeholder="Nama Pengguna">
+            <div class="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-[#82C341] flex items-center justify-center">
+                        <i class="fa-solid fa-folder-plus"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Create New Project</h3>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Buat workspace project baru tanpa menyalin data project lain.</p>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Email Disiplin / Akun</label>
-                    <input type="email" id="adminRegEmail" required class="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500" placeholder="user@piping.com">
+                <button @click="closeCreateProjectModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form @submit.prevent="createProject()" class="p-6 space-y-5">
+
+                <div x-show="createProjectMessage" x-cloak
+                     :class="createProjectMessageType === 'success'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                        : 'bg-rose-50 border-rose-200 text-rose-700'"
+                     class="rounded-xl border px-3.5 py-3 text-[11px] flex items-start gap-2">
+                    <i :class="createProjectMessageType === 'success' ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-exclamation'" class="mt-0.5"></i>
+                    <span x-text="createProjectMessage"></span>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Peran (Role)</label>
-                    <select id="adminRegRole" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500 bg-white">
-                        <option value="System Administrator">System Administrator</option>
-                        <option value="Process Engineer">Process Engineer (Originator)</option>
-                        <option value="Lead Process Engineer">Lead Process Engineer (Approver)</option>
-                        <option value="Piping Engineer">Piping Engineer (Contributor)</option>
-                        <option value="Lead Piping Engineer">Lead Piping Engineer (Approver)</option>
-                        <option value="Stress Engineer">Stress Engineer (Contributor)</option>
-                        <option value="Designer">Designer (Originator)</option>
-                        <option value="QA/QC">QA/QC & Material (Contributor)</option>
-                        <option value="Project Manager">Project Manager & Client (Approver)</option>
-                    </select>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 mb-1.5">
+                            Project Code <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-xs">
+                                <i class="fa-solid fa-hashtag"></i>
+                            </span>
+                            <input type="text"
+                                   x-model="createProjectForm.code"
+                                   @input="createProjectForm.code = createProjectForm.code.toUpperCase().replace(/\s+/g, '')"
+                                   placeholder="Contoh: PRJ-3000 / BMBQ-01 / E2401"
+                                   maxlength="50"
+                                   autocomplete="off"
+                                   class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#82C341]/30 focus:border-[#82C341]">
+                        </div>
+                        <p class="text-[9px] text-slate-400 mt-1">Isi sesuai kode project yang digunakan pada file atau dokumen project.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 mb-1.5">
+                            Project Name <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-xs">
+                                <i class="fa-solid fa-briefcase"></i>
+                            </span>
+                            <input type="text"
+                                   x-model="createProjectForm.name"
+                                   placeholder="Piping & Equipment"
+                                   maxlength="80"
+                                   autocomplete="off"
+                                   class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#82C341]/30 focus:border-[#82C341]">
+                        </div>
+                    </div>
                 </div>
+
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                    <input type="password" id="adminRegPassword" required class="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500" placeholder="Password akun">
+                    <label class="block text-[11px] font-bold text-slate-700 mb-1.5">
+                        Project Description <span class="text-slate-400 font-normal">(optional)</span>
+                    </label>
+                    <textarea x-model="createProjectForm.description"
+                              rows="2"
+                              maxlength="180"
+                              placeholder="Contoh: Piping & Equipment untuk project baru..."
+                              class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-[#82C341]/30 focus:border-[#82C341]"></textarea>
                 </div>
-                <div class="flex space-x-2 pt-3">
-                    <button type="button" onclick="closeAddAccountModal()" class="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded text-xs">Batal</button>
-                    <button type="submit" class="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs">Simpan Akun</button>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-700">Data Initialization</label>
+                            <p class="text-[9px] text-slate-400 mt-0.5">Pilih cara mengisi project baru.</p>
+                        </div>
+                        <span class="text-[9px] font-semibold text-[#82C341] bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-full">
+                            Project baru selalu terpisah
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label class="project-init-option cursor-pointer"
+                               :class="createProjectForm.initialization === 'empty' ? 'active' : ''">
+                            <input type="radio" class="sr-only" value="empty" x-model="createProjectForm.initialization">
+                            <div class="flex items-start gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-emerald-50 text-[#82C341] flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-file-circle-plus"></i>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">Empty Project</div>
+                                    <p class="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                                        Semua sheet dibuat kosong. Cocok untuk project baru.
+                                    </p>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="project-init-option cursor-pointer"
+                               :class="createProjectForm.initialization === 'import' ? 'active' : ''">
+                            <input type="radio" class="sr-only" value="import" x-model="createProjectForm.initialization">
+                            <div class="flex items-start gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">Import Excel</div>
+                                    <p class="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                                        Buat project sekaligus mengisi data dari file Excel.
+                                    </p>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div x-show="createProjectForm.initialization === 'import'" x-cloak
+                     class="rounded-xl border border-dashed border-amber-300 bg-amber-50/60 p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-white border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-upload"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <label class="text-[10px] font-bold text-slate-700 block">Pilih File Excel</label>
+                            <p class="text-[9px] text-slate-500 mt-0.5 truncate"
+                               x-text="createProjectForm.fileName || 'Belum ada file dipilih (.xlsx / .xls)'"></p>
+                        </div>
+                        <label class="px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-amber-100 transition shrink-0">
+                            Browse
+                            <input type="file" accept=".xlsx,.xls" class="hidden" @change="handleCreateProjectFile($event)">
+                        </label>
+                    </div>
+                    <div x-show="createProjectForm.fileName" x-cloak class="mt-3 text-[9px] text-emerald-700 flex items-center gap-1">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>File siap diimport saat project dibuat.</span>
+                    </div>
+                </div>
+
+                <div class="rounded-xl bg-slate-50 border border-slate-200 p-3.5">
+                    <div class="flex items-start gap-2">
+                        <i class="fa-solid fa-circle-info text-[#82C341] mt-0.5"></i>
+                        <div>
+                            <p class="text-[10px] font-semibold text-slate-700">Workspace yang akan dibuat</p>
+                            <p class="text-[9px] text-slate-500 mt-1 leading-relaxed">
+                                SP Items, Valve, Support, LineList, Pipe, Fitting, Equipment, dan sheet master lainnya tersedia otomatis.
+                                Data project lain tidak akan disalin.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <span class="text-[9px] text-slate-400">
+                        <i class="fa-solid fa-shield-halved mr-1"></i>Data tersimpan di browser workspace ini.
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <button type="button"
+                                @click="closeCreateProjectModal()"
+                                class="px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200 transition">
+                            Batal
+                        </button>
+                        <button type="submit"
+                                :disabled="isCreatingProject"
+                                class="px-4 py-2.5 bg-[#82C341] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-2">
+                            <i :class="isCreatingProject ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-folder-plus'"></i>
+                            <span x-text="isCreatingProject ? 'Creating...' : 'Create Project'"></span>
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Custom Notification Box -->
-    <div id="customModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5 border border-slate-300 text-center space-y-3">
-            <div id="customModalIcon" class="text-3xl text-blue-600"><i class="fa-solid fa-circle-info"></i></div>
-            <h4 id="customModalTitle" class="font-bold text-slate-800 text-sm">Informasi Studio</h4>
-            <p id="customModalText" class="text-xs text-slate-600"></p>
-            <button type="button" id="customModalClose" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs">OK</button>
+    <!-- MODAL TAMBAH DATA DINAMIS -->
+    <div x-show="showAddModal" x-cloak class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+        <div class="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
+                    <i class="fa-solid fa-circle-plus text-[#82C341]"></i>
+                    <span x-text="'Tambah Data ' + activeSheet + ' - ' + activeProject"></span>
+                </h3>
+                <button @click="showAddModal = false" class="text-slate-400 hover:text-slate-800"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+
+            <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800">
+                <i class="fa-solid fa-circle-info mr-1"></i> Form menyesuaikan kategori aktif: <b x-text="activeSheet"></b>. Data baru akan tersimpan pada proyek aktif.
+            </div>
+
+            <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar text-xs">
+                <div>
+                    <label class="block text-slate-600 mb-1">Long Description / Nama Item</label>
+                    <input type="text" x-model="newRowForm.longDesc" :placeholder="activeSheet === 'LineList' ? 'Contoh: Process Line / Utility Line' : (activeSheet === 'Support' ? 'Contoh: Pipe Shoe / Guide Support' : 'Contoh: Gate Valve / Pipe / Fitting')" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:ring-1 focus:ring-[#82C341] focus:outline-none">
+                </div>
+
+                <template x-if="activeSheet === 'Support'">
+                    <div>
+                        <label class="block text-slate-600 mb-1">Support Type</label>
+                        <select x-model="newRowForm.supportType" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="Pipe Shoe">Pipe Shoe</option>
+                            <option value="Guide">Guide</option>
+                            <option value="Anchor">Anchor</option>
+                            <option value="Hanger">Hanger</option>
+                            <option value="Clamp">Clamp</option>
+                        </select>
+                    </div>
+                </template>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-600 mb-1">Material</label>
+                        <select x-model="newRowForm.material" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="CS">Carbon Steel (CS)</option>
+                            <option value="SS">Stainless Steel (SS)</option>
+                            <option value="AS">Alloy Steel (AS)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 mb-1">Spec</label>
+                        <select x-model="newRowForm.spec" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="CS150">CS150 (Class 150)</option>
+                            <option value="CS300">CS300 (Class 300)</option>
+                            <option value="SS150">SS150 (Stainless 150)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-600 mb-1">Size</label>
+                        <select x-model="newRowForm.size" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="1/2">1/2"</option><option value="3/4">3/4"</option><option value="1">1"</option><option value="2">2"</option><option value="3">3"</option><option value="4">4"</option><option value="6">6"</option><option value="8">8"</option><option value="10">10"</option><option value="12">12"</option>
+                        </select>
+                    </div>
+                    <div x-show="activeSheet !== 'LineList'">
+                        <label class="block text-slate-600 mb-1">Quantity</label>
+                        <input type="number" min="0" x-model="newRowForm.qty" placeholder="Contoh: 10" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                    </div>
+                    <div x-show="activeSheet === 'LineList'">
+                        <label class="block text-slate-600 mb-1">Pressure Class</label>
+                        <select x-model="newRowForm.pressure" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="150">150 LB</option><option value="300">300 LB</option><option value="600">600 LB</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div x-show="activeSheet !== 'LineList'">
+                        <label class="block text-slate-600 mb-1">Satuan</label>
+                        <select x-model="newRowForm.unit" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="EA">EA</option><option value="M">M</option><option value="SET">SET</option><option value="KG">KG</option>
+                        </select>
+                    </div>
+                    <div x-show="activeSheet === 'LineList'">
+                        <label class="block text-slate-600 mb-1">Fluid Service</label>
+                        <input type="text" x-model="newRowForm.service" placeholder="Contoh: Cooling Water" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                    </div>
+                    <div x-show="activeSheet !== 'LineList'">
+                        <label class="block text-slate-600 mb-1">Line Number Tag</label>
+                        <input type="text" x-model="newRowForm.tag" placeholder="Contoh: 100-CDP-8-0001-C1501" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none font-mono">
+                    </div>
+                </div>
+
+                <template x-if="activeSheet === 'LineList'">
+                    <div>
+                        <label class="block text-slate-600 mb-1">Line Number Tag</label>
+                        <input type="text" x-model="newRowForm.tag" placeholder="Contoh: 100-CDP-8-0001-C1501" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none font-mono">
+                    </div>
+                </template>
+
+                <template x-if="activeSheet !== 'Support' && activeSheet !== 'LineList'">
+                    <div>
+                        <label class="block text-slate-600 mb-1">Waste Factor Margin (%)</label>
+                        <select x-model="newRowForm.wasteFactor" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 focus:outline-none">
+                            <option value="5">5% - Standar Pipa / Fitting</option>
+                            <option value="10">10% - Standar Valve / Flange</option>
+                            <option value="20">20% - Standar Insulation</option>
+                        </select>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-200">
+                <button @click="showAddModal = false" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 text-xs">Batal</button>
+                <button @click="saveNewRowData" style="background-color: #82C341;" class="px-4 py-2 text-white font-semibold rounded-xl hover:opacity-90 text-xs shadow"><i class="fa-solid fa-check mr-1"></i> Simpan Data</button>
+            </div>
         </div>
     </div>
 
-    <!-- External Script -->
-    <script src="script.js?v=20260818-add-row-autoscroll-final"></script>
+    <!-- MODAL CALCULATE BOM / BQ - ENGINEER -->
+    <div x-show="showBomModal" x-cloak class="bom-modal-overlay fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+        <div class="bg-white border border-slate-200 rounded-2xl w-[96vw] max-w-[1500px] max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-calculator text-[#82C341]"></i> CALCULATE BOM</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">Perhitungan quantity BQ berdasarkan data MTO per Line No. Prototype sesuai alur Engineer → Estimator → Lead.</p>
+                </div>
+                <button @click="showBomModal = false" class="text-slate-400 hover:text-slate-800"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="p-5 overflow-y-auto custom-scrollbar space-y-4">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Total Item MTO</span><b class="text-lg text-slate-700" x-text="allProjectsData[activeProject]?.meta?.bom?.totalItems || 0"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Total Quantity</span><b class="text-lg text-slate-700" x-text="(allProjectsData[activeProject]?.meta?.bom?.totalQty || 0).toFixed(2)"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Pipe Quantity</span><b class="text-lg text-slate-700" x-text="(allProjectsData[activeProject]?.meta?.bom?.pipeQty || 0).toFixed(2) + ' m'"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Total Inch-Dia</span><b class="text-lg text-indigo-600" x-text="(allProjectsData[activeProject]?.meta?.bom?.totalInchDia || 0).toFixed(2)"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Total Joint</span><b class="text-lg text-slate-700" x-text="(allProjectsData[activeProject]?.meta?.bom?.totalJoint || 0).toFixed(2)"></b></div>
+                </div>
+
+                <div x-show="workflowStatus === 'REVISION_REQUIRED'" class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                    <b><i class="fa-solid fa-triangle-exclamation mr-1"></i> Catatan Revisi Lead:</b>
+                    <div class="mt-1" x-text="allProjectsData[activeProject]?.meta?.revisionNotes || '-' "></div>
+                </div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden bom-detail-box">
+                    <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700">Detail Perhitungan BOM / BQ</div>
+                    <div class="bom-detail-scroll custom-scrollbar">
+                        <table class="bom-detail-table text-[10px]">
+                            <colgroup>
+                                <col class="c-no"><col class="c-line"><col class="c-sheet"><col class="c-component"><col class="c-desc">
+                                <col class="c-qty"><col class="c-size"><col class="c-size"><col class="c-length"><col class="c-unit"><col class="c-inch">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Line No.</th>
+                                    <th>Sheet</th>
+                                    <th>Component</th>
+                                    <th>Description</th>
+                                    <th>Qty</th>
+                                    <th>Size 1</th>
+                                    <th>Size 2</th>
+                                    <th>Length</th>
+                                    <th>Unit</th>
+                                    <th>Inch-Dia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="row in (allProjectsData[activeProject]?.meta?.bom?.details || [])" :key="row.no + '-' + row.sheet + '-' + row.lineNo">
+                                    <tr>
+                                        <td x-text="row.no"></td>
+                                        <td class="font-mono" x-text="row.lineNo"></td>
+                                        <td x-text="row.sheet"></td>
+                                        <td x-text="row.component"></td>
+                                        <td class="text-left" x-text="row.description || '-' "></td>
+                                        <td class="text-right" x-text="Number(row.qty).toFixed(2)"></td>
+                                        <td class="text-right" x-text="row.size1 || '-' "></td>
+                                        <td class="text-right" x-text="row.size2 || '-' "></td>
+                                        <td class="text-right" x-text="row.length || '-' "></td>
+                                        <td class="text-center" x-text="row.unit"></td>
+                                        <td class="text-right font-bold text-indigo-600" x-text="Number(row.inchDia).toFixed(2)"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+                <span class="text-[10px] text-slate-500">Hasil BOM menjadi input Estimator. Nilai harga belum dihitung di tahap Engineer.</span>
+                <div class="flex gap-2">
+                    <button @click.stop.prevent="recalculateBOM()" type="button" class="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200 cursor-pointer">Hitung Ulang</button>
+                    <button @click="submitBOMToEstimator" class="px-4 py-2 bg-[#82C341] text-white rounded-xl text-xs font-semibold shadow">Kirim ke Estimator <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL KALKULASI BOQ - ESTIMATOR -->
+    <div x-show="showBoqModal" x-cloak class="boq-modal-overlay fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+        <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-7xl max-h-[94vh] shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div><h3 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-money-bill-wave text-indigo-600"></i> KALKULASI BIAYA BOQ</h3><p class="text-[10px] text-slate-500 mt-1">Estimator menerima hasil BOM Engineer lalu memasukkan harga satuan dan indirect cost.</p></div>
+                <button @click="showBoqModal = false" class="text-slate-400 hover:text-slate-800"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 overflow-y-auto custom-scrollbar space-y-4">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Total Item BOM</span><b class="text-lg text-slate-700" x-text="allProjectsData[activeProject]?.meta?.boq?.items?.length || 0"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Level Harga</span><b class="text-sm text-indigo-600" x-text="activePriceLevel"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Direct Cost</span><b class="text-lg text-slate-700" x-text="formatCurrency(allProjectsData[activeProject]?.meta?.boq?.directCost || 0)"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Indirect Cost</span><b class="text-lg text-slate-700" x-text="formatCurrency(allProjectsData[activeProject]?.meta?.boq?.indirectCost || 0)"></b></div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-[10px] text-slate-400 block">Total BOQ</span><b class="text-lg text-emerald-600" x-text="formatCurrency(allProjectsData[activeProject]?.meta?.boq?.totalCost || 0)"></b></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div><label class="text-[10px] font-semibold text-slate-600">Level Harga</label><select x-model="activePriceLevel" class="mt-1 w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs"><option>Bawah</option><option>Menengah</option><option>Atas</option></select></div>
+                    <div><label class="text-[10px] font-semibold text-slate-600">Mata Uang</label><select x-model="boqCurrency" class="mt-1 w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs"><option value="USD">USD ($)</option><option value="IDR">IDR (Rp)</option></select></div>
+                    <div><label class="text-[10px] font-semibold text-slate-600">Indirect Cost</label><input type="number" min="0" step="0.01" :value="allProjectsData[activeProject]?.meta?.boq?.indirectCost || 0" @input="setIndirectCost($event.target.value)" class="mt-1 w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                        <span class="text-[10px] text-emerald-600 block">Kelompok Harga</span>
+                        <b class="text-lg text-emerald-700" x-text="allProjectsData[activeProject]?.meta?.boq?.priceGroups?.length || 0"></b>
+                        <span class="text-[9px] text-emerald-600 block">Estimator mengisi per kelompok</span>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                        <span class="text-[10px] text-blue-600 block">Harga Sudah Diisi</span>
+                        <b class="text-lg text-blue-700" x-text="getBOQPriceCoverage().priced"></b>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                        <span class="text-[10px] text-amber-600 block">Belum Diisi</span>
+                        <b class="text-lg text-amber-700" x-text="getBOQPriceCoverage().unpriced"></b>
+                    </div>
+                </div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                        <div class="text-xs font-bold">Harga BOQ — Per Kelompok Item</div>
+                        <div class="text-[10px] text-slate-500 mt-1">
+                            Isi Unit Price satu kali. Semua item BOM yang memiliki karakteristik harga yang sama akan otomatis menggunakan harga tersebut.
+                        </div>
+                    </div>
+                    <div class="max-h-[45vh] overflow-auto custom-scrollbar">
+                        <table class="boq-detail-table">
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Sheet</th>
+                                    <th>Component</th>
+                                    <th>Description</th>
+                                    <th>Size 1</th>
+                                    <th>Size 2</th>
+                                    <th>Unit</th>
+                                    <th>Jumlah Item</th>
+                                    <th>Total Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(group, index) in (allProjectsData[activeProject]?.meta?.boq?.priceGroups || [])" :key="group.key">
+                                    <tr :class="Number(group.unitPrice || 0) > 0 ? '' : 'bg-amber-50'">
+                                        <td x-text="index + 1"></td>
+                                        <td x-text="group.sheet"></td>
+                                        <td x-text="group.component"></td>
+                                        <td :title="group.description" x-text="group.description"></td>
+                                        <td x-text="group.size1 ?? '-'"></td>
+                                        <td x-text="group.size2 ?? '-'"></td>
+                                        <td x-text="group.unit"></td>
+                                        <td x-text="group.itemCount"></td>
+                                        <td x-text="Number(group.qty || 0).toFixed(2)"></td>
+                                        <td>
+                                            <input type="number" min="0" step="0.01"
+                                                :value="group.unitPrice || 0"
+                                                @input="updateBOQPriceGroup(index, $event.target.value)"
+                                                class="boq-price-input"
+                                                placeholder="Masukkan harga">
+                                        </td>
+                                        <td x-text="formatCurrency((Number(group.qty || 0) * Number(group.unitPrice || 0)))"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 text-xs font-bold">
+                        Detail BOM (641 item tetap tersedia)
+                    </div>
+                    <div class="max-h-[25vh] overflow-auto custom-scrollbar">
+                        <table class="boq-detail-table">
+                            <thead>
+                                <tr>
+                                    <th>No</th><th>Line No.</th><th>Sheet</th><th>Component</th><th>Description</th>
+                                    <th>Qty</th><th>Size 1</th><th>Size 2</th><th>Unit</th><th>Unit Price</th><th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(row, index) in (allProjectsData[activeProject]?.meta?.boq?.items || [])" :key="row.key">
+                                    <tr>
+                                        <td x-text="index + 1"></td>
+                                        <td class="font-mono" x-text="row.lineNo || '-'"></td>
+                                        <td x-text="row.sheet || '-'"></td>
+                                        <td x-text="row.component || '-'"></td>
+                                        <td x-text="row.description || '-'"></td>
+                                        <td x-text="Number(row.qty || 0).toFixed(2)"></td>
+                                        <td x-text="row.size1 ?? '-'"></td>
+                                        <td x-text="row.size2 ?? '-'"></td>
+                                        <td x-text="row.unit || '-'"></td>
+                                        <td x-text="formatCurrency(row.unitPrice || 0)"></td>
+                                        <td x-text="formatCurrency(row.totalPrice || 0)"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+                <button @click="showBoqModal = false" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs">Tutup</button>
+                <button @click="submitBOQToLead" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-xl text-xs shadow">Kirim BOQ ke Lead <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                <button @click="exportBOQ" class="px-4 py-2 bg-[#82C341] text-white font-semibold rounded-xl text-xs shadow">Export BOQ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL APPROVAL / REVIEW -->
+    <div x-show="showApproveModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-3 py-4">
+        <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-6xl max-h-[92vh] shadow-2xl overflow-hidden flex flex-col" @click.stop>
+            <div class="px-5 py-4 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
+                        <i class="fa-solid fa-check-double text-sky-600"></i>
+                        <span>REVIEW &amp; APPROVAL LAPORAN PROYEK</span>
+                    </h3>
+                    <p class="text-[10px] text-slate-500 mt-1">
+                        Lead hanya mereview item BOM yang <b>Line Number MTO-nya ditemukan di Line List</b>.
+                    </p>
+                </div>
+                <button @click="showApproveModal = false" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4 overflow-y-auto custom-scrollbar">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <div class="text-[9px] uppercase font-bold text-slate-400">Total MTO</div>
+                        <div class="text-lg font-bold text-slate-800" x-text="(allProjectsData[activeProject]?.meta?.bom?.totalMtoItems ?? 0)"></div>
+                    </div>
+                    <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                        <div class="text-[9px] uppercase font-bold text-emerald-600">MTO Match Line List</div>
+                        <div class="text-lg font-bold text-emerald-700" x-text="(allProjectsData[activeProject]?.meta?.bom?.totalItems ?? 0)"></div>
+                        <div class="text-[9px] text-emerald-600">Masuk perhitungan BOM</div>
+                    </div>
+                    <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                        <div class="text-[9px] uppercase font-bold text-rose-600">MTO Tidak Match</div>
+                        <div class="text-lg font-bold text-rose-700" x-text="(allProjectsData[activeProject]?.meta?.bom?.excludedNoLine ?? 0)"></div>
+                        <div class="text-[9px] text-rose-600">Tidak dihitung</div>
+                    </div>
+                    <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                        <div class="text-[9px] uppercase font-bold text-sky-600">Total BOQ</div>
+                        <div class="text-lg font-bold text-sky-700" x-text="formatCurrency(allProjectsData[activeProject]?.meta?.boq?.totalCost || 0)"></div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[10px] text-blue-800">
+                    <b>Aturan Supervisor:</b> jika Line Number ada di <b>MTO</b> dan juga ada di <b>Line List</b>, item dihitung. Jika Line Number hanya ada di MTO dan tidak ditemukan di Line List, item <b>tidak dihitung dan tidak masuk BOM/BOQ</b>.
+                </div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-800">Detail BOM / BOQ yang Dihitung</h4>
+                            <p class="text-[9px] text-slate-500 mt-0.5">Hanya baris yang lolos pencocokan MTO ↔ Line List.</p>
+                        </div>
+                        <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full" x-text="(allProjectsData[activeProject]?.meta?.boq?.items?.length || 0) + ' item'" ></span>
+                    </div>
+                    <div class="max-h-[38vh] overflow-auto custom-scrollbar">
+                        <table class="w-full text-[10px] border-collapse">
+                            <thead class="sticky top-0 bg-slate-100 z-10">
+                                <tr>
+                                    <th class="px-3 py-2 border-b border-r border-slate-200 text-left">No</th>
+                                    <th class="px-3 py-2 border-b border-r border-slate-200 text-left">Line No.</th>
+                                    <th class="px-3 py-2 border-b border-r border-slate-200 text-left">Sheet</th>
+                                    <th class="px-3 py-2 border-b border-r border-slate-200 text-left">Component</th>
+                                    <th class="px-3 py-2 border-b border-r border-slate-200 text-left min-w-[280px]">Description</th>
+                                    <th class="px-3 py-2 border-b border-r border-slate-200 text-right">Qty</th>
+                                    <th class="px-3 py-2 border-b border-slate-200 text-right">Inch-Dia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(item, index) in (allProjectsData[activeProject]?.meta?.boq?.items || [])" :key="'lead-review-' + index">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="px-3 py-2 border-b border-r border-slate-100" x-text="index + 1"></td>
+                                        <td class="px-3 py-2 border-b border-r border-slate-100 font-mono font-semibold text-slate-700 whitespace-nowrap" x-text="item.lineNo || '-'" ></td>
+                                        <td class="px-3 py-2 border-b border-r border-slate-100" x-text="item.sheet || '-'" ></td>
+                                        <td class="px-3 py-2 border-b border-r border-slate-100" x-text="item.component || '-'" ></td>
+                                        <td class="px-3 py-2 border-b border-r border-slate-100" x-text="item.description || '-'" ></td>
+                                        <td class="px-3 py-2 border-b border-r border-slate-100 text-right" x-text="Number(item.qty || 0).toFixed(2)" ></td>
+                                        <td class="px-3 py-2 border-b border-slate-100 text-right font-semibold" x-text="Number(item.inchDia || 0).toFixed(2)" ></td>
+                                    </tr>
+                                </template>
+                                <tr x-show="!(allProjectsData[activeProject]?.meta?.boq?.items?.length)">
+                                    <td colspan="7" class="px-4 py-8 text-center text-slate-400">Belum ada item BOQ yang match dengan Line List.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="space-y-1 pt-1">
+                    <label class="block text-[11px] font-bold text-slate-700">Catatan / Alasan Revisi:</label>
+                    <textarea id="reviewer-notes-textarea" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-600" rows="3" placeholder="Berikan catatan, instruksi, atau koreksi untuk estimator..."></textarea>
+                </div>
+            </div>
+
+            <div class="px-5 py-4 border-t border-slate-200 bg-white flex items-center justify-end space-x-2 flex-wrap gap-2 shrink-0">
+                <button @click="showApproveModal = false" class="px-3.5 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-300 transition">Batal</button>
+                <button @click="handleMintaRevisi" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition">Minta Revisi</button>
+                <button @click="rejectData" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs transition">Reject</button>
+                <button @click="confirmApprove" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl text-xs shadow transition">Approve</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INFO MODULE / APPS -->
+    <div x-show="showModuleModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+        <div class="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
+                    <i class="fa-solid fa-circle-info text-[#82C341]"></i>
+                    <span x-text="'MODUL: ' + activeModuleName"></span>
+                </h3>
+                <button @click="showModuleModal = false" class="text-slate-400 hover:text-slate-800"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+
+            <div class="space-y-4 text-xs text-slate-700 max-h-[65vh] overflow-y-auto pr-1 custom-scrollbar">
+                
+                <!-- 1. TRAVEL -->
+                <template x-if="activeModuleName === 'Travel'">
+                    <div class="space-y-3">
+                        <div class="p-4 bg-sky-50 border border-sky-200 rounded-xl space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-sky-700 font-bold uppercase tracking-wider">Perjalanan Dinas Aktif</span>
+                                <span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">Confirmed</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="font-bold text-slate-800 text-sm">Jakarta (CGK) ➔ Yogyakarta (YIA)</div>
+                                <div class="text-[11px] text-slate-600"><i class="fa-regular fa-calendar mr-1"></i> Tanggal Berangkat: <b>15 Agustus 2026</b></div>
+                                <div class="text-[11px] text-slate-600"><i class="fa-solid fa-hotel mr-1"></i> Akomodasi: <b>Grand Aston Yogyakarta (Room 402)</b></div>
+                                <div class="text-[11px] text-slate-600"><i class="fa-solid fa-ticket mr-1"></i> Status Tiket: <b>E-Ticket Issued (GA-212)</b></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                            <span class="font-bold text-slate-800 block">Form Pengajuan / Ubah Jadwal</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" x-model="travelForm.destination" placeholder="Tujuan Kota" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs">
+                                <input type="date" x-model="travelForm.date" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs">
+                            </div>
+                            <button @click="submitTravelRequest" class="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-lg text-xs transition">Simpan / Ajukan Perjalanan</button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 2. CALENDAR -->
+                <template x-if="activeModuleName === 'Calendar'">
+                    <div class="space-y-3">
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                            <div class="flex items-center justify-between font-bold text-slate-800">
+                                <div class="flex items-center space-x-2">
+                                    <select x-model="calendarMonth" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none">
+                                        <template x-for="(mName, idx) in monthNames" :key="idx">
+                                            <option :value="idx" x-text="mName"></option>
+                                        </template>
+                                    </select>
+                                    <select x-model="calendarYear" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none">
+                                        <template x-for="yr in [2024, 2025, 2026, 2027, 2028]" :key="yr">
+                                            <option :value="yr" x-text="yr"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div class="space-x-1 text-xs text-slate-500">
+                                    <button @click="prevMonth()" class="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100"><i class="fa-solid fa-chevron-left"></i></button>
+                                    <button @click="nextMonth()" class="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100"><i class="fa-solid fa-chevron-right"></i></button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-7 gap-1 text-center font-semibold text-[10px] text-slate-400 pb-1">
+                                <span>Min</span><span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 text-center text-xs">
+                                <template x-for="blank in calendarFirstDayIndex">
+                                    <div></div>
+                                </template>
+                                <template x-for="d in calendarDaysInMonth" :key="d">
+                                    <div @click="selectCalendarDate(d)" 
+                                        :class="selectedCalendarDate === d ? 'bg-purple-600 text-white font-bold rounded-lg shadow' : 'hover:bg-slate-200 rounded text-slate-700'"
+                                        class="py-1.5 cursor-pointer transition font-medium" x-text="d"></div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="bg-purple-50 border border-purple-200 rounded-xl p-3 space-y-2">
+                            <span class="font-bold text-purple-900 block" x-text="'Agenda Tanggal: ' + selectedCalendarDate + ' ' + monthNames[calendarMonth] + ' ' + calendarYear"></span>
+                            <div class="flex space-x-2">
+                                <input type="text" x-model="newAgendaText" placeholder="Tambah agenda/kegiatan baru..." class="flex-1 px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-xs">
+                                <button @click="addAgenda" class="px-3 py-1.5 bg-purple-600 text-white rounded-lg font-semibold text-xs hover:bg-purple-700">Simpan</button>
+                            </div>
+                            <div class="space-y-1 pt-1">
+                                <template x-for="(agend, aIdx) in (calendarAgendas[selectedCalendarDate + '-' + calendarMonth + '-' + calendarYear] || [])" :key="aIdx">
+                                    <div class="bg-white p-2 rounded-lg border border-purple-100 flex items-center justify-between text-xs">
+                                        <span x-text="agend"></span>
+                                        <button @click="removeAgenda(selectedCalendarDate + '-' + calendarMonth + '-' + calendarYear, aIdx)" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-trash text-[10px]"></i></button>
+                                    </div>
+                                </template>
+                                <template x-if="!calendarAgendas[selectedCalendarDate + '-' + calendarMonth + '-' + calendarYear] || calendarAgendas[selectedCalendarDate + '-' + calendarMonth + '-' + calendarYear].length === 0">
+                                    <div class="text-[11px] text-slate-400 italic">Belum ada agenda pada tanggal ini.</div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 3. HR DOCS -->
+                <template x-if="activeModuleName === 'HR Docs'">
+                    <div class="space-y-3" x-data="{ hrTab: 'sk' }">
+                        <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
+                            <button @click="hrTab = 'sk'" :class="hrTab === 'sk' ? 'bg-white text-amber-700 font-bold shadow-sm' : 'text-slate-600'" class="py-1.5 rounded-lg text-xs transition">Surat SK</button>
+                            <button @click="hrTab = 'gaji'" :class="hrTab === 'gaji' ? 'bg-white text-amber-700 font-bold shadow-sm' : 'text-slate-600'" class="py-1.5 rounded-lg text-xs transition">Slip Gaji</button>
+                            <button @click="hrTab = 'sertif'" :class="hrTab === 'sertif' ? 'bg-white text-amber-700 font-bold shadow-sm' : 'text-slate-600'" class="py-1.5 rounded-lg text-xs transition">Sertifikat Pelatihan</button>
+                        </div>
+
+                        <div class="space-y-2 pt-1">
+                            <template x-if="hrTab === 'sk'">
+                                <div class="space-y-2">
+                                    <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+                                        <div class="flex items-center space-x-2">
+                                            <i class="fa-solid fa-file-contract text-amber-600 text-sm"></i>
+                                            <div>
+                                                <span class="text-xs font-bold text-slate-800 block">SK Pengangkatan Karyawan Tetap.pdf</span>
+                                                <span class="text-[9px] text-slate-400">Terbit: 12 Jan 2024</span>
+                                            </div>
+                                        </div>
+                                        <div class="space-x-1">
+                                            <button @click="alert('Pratinjau (Preview) Dokumen SK...')" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-semibold">Preview</button>
+                                            <button @click="alert('Mengunduh SK...')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-semibold">Unduh</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="hrTab === 'gaji'">
+                                <div class="space-y-2">
+                                    <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+                                        <div class="flex items-center space-x-2">
+                                            <i class="fa-solid fa-file-pdf text-rose-500 text-sm"></i>
+                                            <div>
+                                                <span class="text-xs font-bold text-slate-800 block">Slip_Gaji_Juli_2026.pdf</span>
+                                                <span class="text-[9px] text-slate-400">Diunggah 1 Agu 2026</span>
+                                            </div>
+                                        </div>
+                                        <div class="space-x-1">
+                                            <button @click="alert('Pratinjau (Preview) Slip Gaji...')" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-semibold">Preview</button>
+                                            <button @click="alert('Mengunduh Slip_Gaji_Juli_2026.pdf')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-semibold">Unduh</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="hrTab === 'sertif'">
+                                <div class="space-y-2">
+                                    <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+                                        <div class="flex items-center space-x-2">
+                                            <i class="fa-solid fa-award text-amber-600 text-sm"></i>
+                                            <div>
+                                                <span class="text-xs font-bold text-slate-800 block">Sertifikat_Piping_Design_Expert.pdf</span>
+                                                <span class="text-[9px] text-slate-400">Terbit: 15 Nov 2025</span>
+                                            </div>
+                                        </div>
+                                        <div class="space-x-1">
+                                            <button @click="alert('Pratinjau (Preview) Sertifikat...')" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-semibold">Preview</button>
+                                            <button @click="alert('Mengunduh Sertifikat...')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-semibold">Unduh</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 4. POLICIES -->
+                <template x-if="activeModuleName === 'Policies'">
+                    <div class="space-y-3" x-data="{ policyFilter: 'Semua' }">
+                        <div class="flex items-center space-x-2">
+                            <button @click="policyFilter = 'Semua'" :class="policyFilter === 'Semua' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-600'" class="px-2.5 py-1 rounded-lg text-[11px] transition">Semua</button>
+                            <button @click="policyFilter = 'SOP'" :class="policyFilter === 'SOP' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-600'" class="px-2.5 py-1 rounded-lg text-[11px] transition">SOP</button>
+                            <button @click="policyFilter = 'Panduan'" :class="policyFilter === 'Panduan' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-600'" class="px-2.5 py-1 rounded-lg text-[11px] transition">Panduan Teknis</button>
+                        </div>
+                        <div class="space-y-1.5">
+                            <template x-for="pol in policiesList.filter(p => policyFilter === 'Semua' || p.category === policyFilter)" :key="pol.id">
+                                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between hover:bg-slate-100">
+                                    <div>
+                                        <span class="font-semibold text-slate-800 block" x-text="pol.title"></span>
+                                        <span class="text-[10px] text-slate-400" x-text="'Kategori: ' + pol.category"></span>
+                                    </div>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded" :class="pol.status === 'Aktif' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-600'" x-text="pol.status"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 5. FLOWS & PERF -->
+                <template x-if="activeModuleName === 'Flows'">
+                    <div class="space-y-3">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block">Tracker Pelacakan Pengajuan & Kinerja</span>
+                        <div class="space-y-2">
+                            <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
+                                <div class="flex items-center justify-between text-[11px] font-bold text-indigo-900">
+                                    <span>Pengajuan Cuti Tahunan (ID-8921)</span>
+                                    <span class="text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-200">Proses Manager</span>
+                                </div>
+                                <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-indigo-600 h-full w-2/3"></div>
+                                </div>
+                                <div class="flex justify-between text-[9px] text-slate-500">
+                                    <span>Submit</span>
+                                    <span>HR (Selesai)</span>
+                                    <span class="font-bold text-indigo-600">Manager (Proses)</span>
+                                </div>
+                            </div>
+                            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                                <div class="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                                    <span>Klaim Reimbursement Medis</span>
+                                    <span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Approved</span>
+                                </div>
+                                <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-emerald-600 h-full w-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="activeModuleName === 'Perf'">
+                    <div class="space-y-3">
+                        <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-slate-800">Status Penilaian Kinerja (KPI 2026)</span>
+                                <span class="text-xs font-bold text-rose-600 bg-white px-2 py-0.5 rounded border border-rose-200">85% (Review Selesai)</span>
+                            </div>
+                            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                                <div class="bg-rose-500 h-full w-[85%]"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                                <div class="bg-white p-2 rounded-lg border border-rose-100">
+                                    <span class="text-slate-400 block text-[9px]">Ketepatan MTO</span>
+                                    <b class="text-slate-800">95% Akurat</b>
+                                </div>
+                                <div class="bg-white p-2 rounded-lg border border-rose-100">
+                                    <span class="text-slate-400 block text-[9px]">Efisiensi Cost</span>
+                                    <b class="text-slate-800">Optimal</b>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 6. REVIEW ATTENDANCE & EXPLORE JOBS -->
+                <template x-if="activeModuleName === 'Attendance'">
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                <span class="text-[10px] text-slate-500 block">Hadir</span>
+                                <span class="text-sm font-bold text-emerald-700">18 Hari</span>
+                            </div>
+                            <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                                <span class="text-[10px] text-slate-500 block">Terlambat</span>
+                                <span class="text-sm font-bold text-amber-700">2 Hari</span>
+                            </div>
+                            <div class="p-2.5 bg-sky-50 border border-sky-200 rounded-xl">
+                                <span class="text-[10px] text-slate-500 block">Cuti</span>
+                                <span class="text-sm font-bold text-sky-700">1 Hari</span>
+                            </div>
+                        </div>
+                        <button @click="alert('Membuka riwayat log absensi harian...')" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition">Lihat Riwayat Log Absensi Harian</button>
+                    </div>
+                </template>
+
+                <template x-if="activeModuleName === 'Talent Referral'">
+                    <div class="space-y-3">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block">Lowongan Pekerjaan Internal Perusahaan</span>
+                        <div class="space-y-2">
+                            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <span class="font-bold text-slate-800 block">Senior Piping Engineer</span>
+                                    <span class="text-[10px] text-slate-400">Lokasi: Jakarta HQ | Departemen: Engineering</span>
+                                </div>
+                                <button @click="alert('Berhasil melamar / mereferensikan posisi Senior Piping Engineer!')" class="px-3 py-1.5 bg-[#82C341] text-white font-semibold rounded-lg text-xs hover:opacity-90">Lamar Posisi</button>
+                            </div>
+                            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <span class="font-bold text-slate-800 block">Lead Cost Estimator</span>
+                                    <span class="text-[10px] text-slate-400">Lokasi: Cilegon Site | Departemen: Proposal</span>
+                                </div>
+                                <button @click="alert('Berhasil melamar / mereferensikan posisi Lead Cost Estimator!')" class="px-3 py-1.5 bg-[#82C341] text-white font-semibold rounded-lg text-xs hover:opacity-90">Lamar Posisi</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+            </div>
+
+            <div class="flex items-center justify-end pt-2 border-t border-slate-200">
+                <button @click="showModuleModal = false" class="px-4 py-2 bg-[#82C341] text-white font-semibold rounded-xl text-xs shadow">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT TAMBAHAN UNTUK LOCALSTORAGE & REVISI -->
     <script>
         let isSidebarCollapsed = false;
-        window.toggleSidebar = function() {
+        function toggleSidebar() {
             const sidebar = document.getElementById('appSidebar');
             const sidebarTexts = document.querySelectorAll('.sidebar-text');
             const brandContainer = document.getElementById('sidebarBrandContainer');
+            
             isSidebarCollapsed = !isSidebarCollapsed;
+            
             if (isSidebarCollapsed) {
                 sidebar.classList.remove('w-64');
                 sidebar.classList.add('w-20');
@@ -720,77 +1585,9 @@
                 sidebarTexts.forEach(el => el.classList.remove('hidden'));
                 if (brandContainer) brandContainer.classList.remove('justify-center');
             }
-        };
-
-        // Fungsi interaksi dropdown proyek sidebar
-        function toggleSidebarProjectDropdown() {
-            const menu = document.getElementById('sidebarProjectDropdownMenu');
-            const chevron = document.getElementById('dropdownChevron');
-            
-            menu.classList.toggle('hidden');
-            if (!menu.classList.contains('hidden')) {
-                chevron.classList.add('rotate-180');
-                renderSidebarProjects();
-            } else {
-                chevron.classList.remove('rotate-180');
-            }
         }
 
-        function closeSidebarProjectDropdown() {
-            const menu = document.getElementById('sidebarProjectDropdownMenu');
-            const chevron = document.getElementById('dropdownChevron');
-            if (menu) menu.classList.add('hidden');
-            if (chevron) chevron.classList.remove('rotate-180');
-        }
-
-        window.addEventListener('click', function(e) {
-            const container = document.getElementById('sidebarProjectContainer');
-            if (container && !container.contains(e.target)) {
-                closeSidebarProjectDropdown();
-            }
-        });
-
-        function renderSidebarProjects() {
-            const container = document.getElementById('dropdownProjectList');
-            if (!container) return;
-
-            let html = '';
-            if (typeof projectsData !== 'undefined') {
-                projectsData.forEach((proj, idx) => {
-                    const isActive = idx === (typeof currentProjectIndex !== 'undefined' ? currentProjectIndex : 0);
-                    let itemStyle = isActive 
-                        ? "bg-slate-700 text-white font-semibold" 
-                        : "text-blue-400 hover:bg-slate-800 hover:text-blue-300";
-
-                    html += `
-                        <button onclick="selectSidebarProject(${idx})" class="w-full text-left px-3 py-2 transition truncate ${itemStyle}">
-                            ${proj.name}
-                        </button>
-                    `;
-                });
-            }
-            container.innerHTML = html;
-        }
-
-        function selectSidebarProject(idx) {
-            if (typeof currentProjectIndex !== 'undefined') {
-                currentProjectIndex = idx;
-            }
-            if (typeof currentProject !== 'undefined') {
-                currentProject = idx;
-            }
-            
-            const activeText = document.getElementById('activeProjectText');
-            if (activeText && projectsData[idx]) {
-                activeText.innerText = projectsData[idx].name;
-            }
-
-            closeSidebarProjectDropdown();
-            
-            if (typeof renderDashboard === 'function') {
-                renderDashboard();
-            }
-        }
     </script>
+    <script src="script.js?v=10"></script>
 </body>
 </html>

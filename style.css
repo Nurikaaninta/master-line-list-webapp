@@ -1,459 +1,1045 @@
-body {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-}
+[x-cloak] { display: none !important; }
 
-.font-mono-data {
-    font-family: 'JetBrains Mono', monospace;
-}
-
-/* =========================================================
-   LINE LIST TABLE
-   Freeze sampai Insulation Section (Type + Thickness).
-   Complete Line No. dan seluruh kolom setelahnya tetap scroll.
-   ========================================================= */
-.line-list-scroll {
-    position: relative;
+/* Posisi tengah untuk judul/nama tabel */
+.table-title-center, 
+.excel-table-container caption, 
+.text-center-title {
+    text-align: center !important;
     width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: auto;
-    isolation: isolate;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+    font-weight: bold;
+    margin-bottom: 10px;
 }
 
+/* Kontainer Utama Tabel */
+.excel-table-container {
+    max-height: 72vh;
+    width: 100%;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    position: relative;
+    background-color: #ffffff;
+    border-radius: 0.75rem;
+    display: block;
+}
+
+/* Tabel Dipaksa Melebar ke Samping - GRID SERAGAM GAYA EXCEL */
 .excel-table {
     width: max-content !important;
-    min-width: 100%;
+    min-width: 0px !important;
+    border-collapse: separate !important;
+    border-spacing: 0;
+    font-size: 11px;
+    color: #334155;
+    border: 1px solid #d3dae3;
+}
+
+.excel-table th, .excel-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e5eaf0;
+    border-right: 1px solid #e5eaf0;
+    background-color: #ffffff;
+    white-space: nowrap;
+}
+
+/* Header TETAP BIASA (Tidak ada posisi sticky/freeze sama sekali) */
+.excel-table th {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 10px;
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+}
+
+/* Baris genap diberi warna sedikit berbeda (zebra), seperti tabel
+   Excel, supaya baris lebih mudah dibaca. Baris draft (inline-new-row)
+   selalu dikecualikan supaya highlight hijau-nya tidak tertimpa. */
+.excel-table tbody tr:nth-child(even):not(.inline-new-row) td {
+    background-color: #f8fafc;
+}
+
+/* Warna background saat baris disorot (hover) */
+.excel-table tbody tr:hover:not(.inline-new-row) td {
+    background-color: #eef2f7 !important;
+}
+
+.excel-input {
+    width: 100%;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px;
+    color: #1e293b;
+}
+
+.excel-input:focus {
+    background-color: #ffffff;
+    border-color: #10b981;
+    outline: none;
+}
+
+/* --- PENGATURAN CETAK / PDF --- */
+@media print {
+    @page {
+        size: landscape;
+        margin: 1cm;
+    }
+
+    body * {
+        visibility: hidden !important;
+    }
+
+    .excel-table-container, 
+    .excel-table-container * {
+        visibility: visible !important;
+    }
+
+    .excel-table-container {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body, html {
+        background-color: white !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .excel-table {
+        width: 100% !important;
+        table-layout: auto !important;
+        border-collapse: collapse !important;
+        font-size: 9px !important;
+    }
+
+    .excel-table th, 
+    .excel-table td {
+        position: static !important;
+        background-color: transparent !important;
+        border: 1px solid #000 !important;
+        padding: 4px 6px !important;
+        white-space: normal !important;
+        color: #000 !important;
+    }
+
+    .excel-table th {
+        background-color: #e2e8f0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-weight: bold !important;
+    }
+
+    .excel-input {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        color: #000 !important;
+        font-size: 9px !important;
+    }
+}
+
+/* ==========================================================
+   WORKSPACE SHELL & TABEL - LAYOUT & SCROLLBAR (RAPI, TANPA DUPLIKASI)
+   Sebelumnya bagian ini berisi banyak blok CSS yang saling
+   menimpa (FIX FINAL, FINAL FIX, FINAL V2, V3, dst) untuk
+   selector yang sama. Sekarang dirapikan menjadi satu sumber
+   kebenaran per selector, dengan hasil akhir yang SAMA seperti
+   sebelumnya (tidak mengubah perilaku, hanya merapikan kode).
+   ========================================================== */
+
+html,
+body {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden !important;
+}
+
+main,
+main > *,
+#dashboardPage,
+.workspace-shell,
+.workspace-shell > *,
+.workspace-table-card,
+.excel-table-container {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+/* Sidebar tetap di tempatnya, tidak ikut jadi area scroll tabel. */
+aside,
+.app-sidebar,
+#appSidebar,
+#sidebar,
+.sidebar {
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
+}
+
+.workspace-shell {
+    height: calc(100vh - 112px) !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Card tabel: kolom flex, tidak pernah melebarkan halaman. */
+.workspace-table-card {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Area scroll vertikal tabel. Lebar tabel diatur oleh JS
+   (updateTableScrollbar) supaya sesuai jumlah kolom. */
+.workspace-table-card .excel-table-container {
+    display: block !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    min-height: 280px !important;
+    height: 420px !important;
+    max-height: 55vh !important;
+    flex: 0 0 420px !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Scrollbar horizontal bawaan tabel disembunyikan; kontrol geser
+   kanan-kiri satu-satunya ada di .table-bottom-scrollbar. */
+.excel-table-container::-webkit-scrollbar:horizontal {
+    height: 0 !important;
+}
+
+.workspace-table-card .excel-table {
+    display: table !important;
+    width: max-content !important;
+    min-width: max-content !important;
+    max-width: none !important;
+    table-layout: auto !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.workspace-table-card .excel-table thead {
+    visibility: visible !important;
+    display: table-header-group !important;
+}
+
+.workspace-table-card .excel-table tbody {
+    visibility: visible !important;
+    display: table-row-group !important;
+}
+
+.workspace-table-card .excel-table tr {
+    display: table-row !important;
+    visibility: visible !important;
+}
+
+.workspace-table-card .excel-table th,
+.workspace-table-card .excel-table td {
+    visibility: visible !important;
+    white-space: nowrap !important;
+    width: auto !important;
+    min-width: max-content !important;
+    max-width: none !important;
+}
+
+/* ==========================================================
+   DEDICATED BOTTOM SCROLLBAR (SATU-SATUNYA PENGONTROL GESER KANAN-KIRI)
+   ========================================================== */
+.workspace-table-card .table-bottom-scrollbar {
+    position: relative !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: 17px !important;
+    min-height: 17px !important;
+    max-height: 17px !important;
+    flex: 0 0 17px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    background: #e5eaf0 !important;
+    border-top: 1px solid #d5dde7 !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: #7b8798 #e5eaf0 !important;
+    cursor: grab;
+}
+
+.workspace-table-card .table-bottom-scrollbar:active {
+    cursor: grabbing;
+}
+
+.workspace-table-card .table-bottom-scrollbar-spacer {
+    display: block !important;
+    width: 1px !important;
+    min-width: 1px !important;
+    height: 1px !important;
+    min-height: 1px !important;
+    max-width: none !important;
+}
+
+/* Chrome / Edge */
+.workspace-table-card .table-bottom-scrollbar::-webkit-scrollbar {
+    height: 12px !important;
+}
+
+.workspace-table-card .table-bottom-scrollbar::-webkit-scrollbar-track {
+    background: #e5eaf0 !important;
+    border-radius: 7px !important;
+}
+
+.workspace-table-card .table-bottom-scrollbar::-webkit-scrollbar-thumb {
+    background: #7b8798 !important;
+    border-radius: 6px !important;
+    border: 2px solid #e5eaf0 !important;
+}
+
+.workspace-table-card .table-bottom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #475569 !important;
+}
+
+/* ==========================================================
+   NAVIGASI 23 KATEGORI
+   ========================================================== */
+.workspace-shell [class*="overflow-x-auto"] {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    box-sizing: border-box !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: #7b8798 #e5eaf0 !important;
+}
+
+.workspace-shell [class*="overflow-x-auto"]::-webkit-scrollbar {
+    height: 12px !important;
+}
+
+.workspace-shell [class*="overflow-x-auto"]::-webkit-scrollbar-track {
+    background: #e5eaf0 !important;
+    border-radius: 6px !important;
+}
+
+.workspace-shell [class*="overflow-x-auto"]::-webkit-scrollbar-thumb {
+    background: #7b8798 !important;
+    border-radius: 6px !important;
+    border: 2px solid #e5eaf0 !important;
+}
+
+.workspace-shell [class*="overflow-x-auto"]::-webkit-scrollbar-thumb:hover {
+    background: #5f6b7a !important;
+}
+
+/* Tombol kategori tidak mengecil, tetap membentuk area geser. */
+.workspace-shell [class*="overflow-x-auto"] > * {
+    flex-shrink: 0 !important;
+}
+
+/* ==========================================================
+   FALLBACK UNTUK LAYOUT FLEX
+   ========================================================== */
+.flex-1,
+.flex-grow,
+[class*="flex-1"] {
+    min-width: 0 !important;
+}
+
+/* ==========================================================
+   INLINE ADD DATA
+   Saat Add data diklik, tabel hanya menampilkan 1 baris draft.
+   ========================================================== */
+.excel-table tr.inline-new-row {
+    background: #f7fff0 !important;
+    outline: 2px solid rgba(130, 195, 65, .35);
+    outline-offset: -1px;
+}
+
+.excel-table tr.inline-new-row input {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    min-height: 28px;
+}
+
+.excel-table tr.inline-new-row input:focus {
+    border-color: #82C341 !important;
+    outline: 2px solid rgba(130, 195, 65, .18) !important;
+}
+
+
+/* ==========================================================
+   TABLE FREEZE V8 - BATAS FREEZE PER SHEET (termasuk kolom No)
+   Kolom yang dibekukan ditentukan oleh freezeColumns (script.js):
+   freeze dari kolom paling kiri sampai kolom batas berikut
+   (termasuk kolom batasnya), sisanya tetap bisa digeser.
+   Kolom "No" di paling kiri SELALU ikut freeze (index 0).
+   - MTO/Valve (dan sheet MTO lain) : ... s.d. Material
+   - SP Items                       : ... s.d. Spec
+   - Pipe Support                   : ... s.d. Material
+   - Line List                      : ... s.d. Seq. No
+   - Vessel/Tank/Pump/Misc Equipment/
+     Equipment/Piping and Equipment : ... s.d. Long Description (Size)
+   Kolom yang dibekukan disusun berjejer (freeze-col-0, freeze-col-1,
+   dst) via CSS var --freeze-left agar tidak saling menumpuk.
+   Kolom lain tetap bergerak horizontal.
+   ========================================================== */
+.workspace-table-card .excel-table th.freeze-col,
+.workspace-table-card .excel-table td.freeze-col {
+    position: sticky !important;
+    left: var(--freeze-left, 0px) !important;
+    background: #ffffff !important;
+    background-clip: padding-box !important;
+    z-index: 40 !important;
+    box-shadow: none !important;
+}
+
+.workspace-table-card .excel-table thead th.freeze-col {
+    top: 0 !important;
+    z-index: 60 !important;
+    background: #f1f5f9 !important;
+    border-right: 2px solid #94a3b8 !important;
+}
+
+.workspace-table-card .excel-table tbody td.freeze-col {
+    border-right: 2px solid #94a3b8 !important;
+}
+
+/* Baris genap tetap mendapat zebra yang sama pada kolom beku,
+   supaya warnanya konsisten dengan kolom lain yang bisa digeser. */
+.workspace-table-card .excel-table tbody tr:nth-child(even):not(.inline-new-row) td.freeze-col {
+    background: #f8fafc !important;
+}
+
+.workspace-table-card .excel-table tbody tr:hover > td.freeze-col {
+    background: #eef2f7 !important;
+}
+
+.workspace-table-card .excel-table tr.inline-new-row > td.freeze-col {
+    background: #f7fff0 !important;
+}
+
+.workspace-table-card .excel-table td.freeze-col .excel-input {
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+}
+
+@media print {
+    .workspace-table-card .excel-table th.freeze-col,
+    .workspace-table-card .excel-table td.freeze-col {
+        position: static !important;
+        left: auto !important;
+    }
+}
+
+/* ==========================================================
+   FILTER KOLOM - GAYA EXCEL
+   Filter ditempatkan tepat di samping nama kolom dan tidak
+   mengubah lebar/struktur tabel.
+   ========================================================== */
+
+.excel-table th .filter-header-content {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+.excel-table th .filter-header-content > span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+.column-filter-btn {
+    flex: 0 0 auto !important;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 4px !important;
+    background: transparent !important;
+    color: #64748b !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 9px !important;
+    transition: all .15s ease !important;
+}
+
+.column-filter-btn:hover,
+.column-filter-btn:focus-visible {
+    background: #e2e8f0 !important;
+    color: #334155 !important;
+    outline: none !important;
+}
+
+.column-filter-btn.is-active {
+    background: #82C341 !important;
+    color: #ffffff !important;
+}
+
+.column-filter-popup {
+    position: fixed !important;
+    z-index: 100000 !important;
+    width: 300px !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: min(430px, calc(100vh - 24px)) !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, .20) !important;
+    color: #334155 !important;
+    overflow: hidden !important;
+    font-size: 11px !important;
+}
+
+.column-filter-popup-header {
+    min-height: 46px !important;
+    padding: 9px 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+}
+
+.column-filter-popup-title {
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    font-size: 12px !important;
+}
+
+.column-filter-popup-column {
+    margin-top: 2px !important;
+    color: #64748b !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 240px !important;
+}
+
+.column-filter-close {
+    width: 25px !important;
+    height: 25px !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    background: transparent !important;
+    color: #64748b !important;
+    cursor: pointer !important;
+}
+
+.column-filter-close:hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+.column-filter-search {
+    margin: 9px 10px 6px !important;
+    height: 30px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 7px !important;
+    padding: 0 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    border-radius: 4px !important;
+}
+
+.column-filter-search i {
+    color: #64748b !important;
+    font-size: 10px !important;
+}
+
+.column-filter-search input {
+    width: 100% !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    outline: 0 !important;
+    background: transparent !important;
+    color: #0f172a !important;
+    font-size: 11px !important;
+}
+
+.column-filter-actions {
+    padding: 4px 10px 7px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.column-filter-check-all {
+    display: flex !important;
+    align-items: center !important;
+    gap: 7px !important;
+    cursor: pointer !important;
+    color: #334155 !important;
+    font-size: 11px !important;
+    user-select: none !important;
+}
+
+.column-filter-check-all input,
+.column-filter-option input {
+    accent-color: #82C341 !important;
+    cursor: pointer !important;
+}
+
+.column-filter-count {
+    color: #94a3b8 !important;
+    font-size: 9px !important;
+    white-space: nowrap !important;
+}
+
+.column-filter-options {
+    max-height: 270px !important;
+    overflow-y: auto !important;
+    padding: 3px 4px !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: #94a3b8 #f1f5f9 !important;
+}
+
+.column-filter-options::-webkit-scrollbar {
+    width: 9px !important;
+}
+
+.column-filter-options::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+}
+
+.column-filter-options::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
+    border-radius: 5px !important;
+}
+
+.column-filter-option {
+    min-height: 27px !important;
+    padding: 4px 7px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    color: #334155 !important;
+    user-select: none !important;
+}
+
+.column-filter-option:hover {
+    background: #f1f5f9 !important;
+}
+
+.column-filter-option span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+.column-filter-empty {
+    padding: 20px 10px !important;
+    text-align: center !important;
+    color: #94a3b8 !important;
+}
+
+.column-filter-limit {
+    padding: 6px 8px !important;
+    color: #94a3b8 !important;
+    font-size: 9px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+}
+
+.column-filter-footer {
+    min-height: 48px !important;
+    padding: 8px 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    border-top: 1px solid #e2e8f0 !important;
+    background: #f8fafc !important;
+}
+
+.column-filter-footer-right {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
+.column-filter-reset,
+.column-filter-cancel,
+.column-filter-apply {
+    height: 28px !important;
+    padding: 0 10px !important;
+    border-radius: 5px !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+}
+
+.column-filter-reset {
+    border: 0 !important;
+    background: transparent !important;
+    color: #64748b !important;
+}
+
+.column-filter-reset:hover {
+    color: #0f172a !important;
+    text-decoration: underline !important;
+}
+
+.column-filter-cancel {
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    color: #475569 !important;
+}
+
+.column-filter-cancel:hover {
+    background: #f1f5f9 !important;
+}
+
+.column-filter-apply {
+    border: 1px solid #82C341 !important;
+    background: #82C341 !important;
+    color: #ffffff !important;
+    min-width: 45px !important;
+}
+
+.column-filter-apply:hover {
+    filter: brightness(.96) !important;
+}
+
+@media print {
+    .column-filter-popup,
+    .column-filter-btn {
+        display: none !important;
+    }
+}
+\n\n/* =========================================================\n   CALCULATE BOM - TABLE LAYOUT FIX\n   Setiap header dikunci ke kolomnya sendiri agar tidak\n   bertumpuk ketika data MTO memiliki banyak kolom/panjang teks.\n   ========================================================= */\n.bom-detail-box {\n    width: 100%;\n    min-width: 0;\n    background: #fff;\n}\n\n.bom-detail-scroll {\n    width: 100%;\n    max-width: 100%;\n    max-height: 48vh;\n    overflow-x: auto !important;\n    overflow-y: auto !important;\n    overscroll-behavior: contain;\n    scrollbar-width: auto;\n}\n\n.bom-detail-table {\n    width: 1450px !important;\n    min-width: 1450px !important;\n    max-width: none !important;\n    table-layout: fixed !important;\n    border-collapse: separate !important;\n    border-spacing: 0;\n    color: #334155;\n}\n\n.bom-detail-table th,\n.bom-detail-table td {\n    box-sizing: border-box;\n    padding: 9px 10px;\n    border-right: 1px solid #e2e8f0;\n    border-bottom: 1px solid #e2e8f0;\n    white-space: nowrap !important;\n    overflow: hidden;\n    text-overflow: ellipsis;\n    vertical-align: middle;\n}\n\n.bom-detail-table th {\n    height: 38px;\n    position: sticky;\n    top: 0;\n    z-index: 5;\n    background: #f1f5f9;\n    color: #334155;\n    font-size: 9px;\n    font-weight: 700;\n    text-transform: uppercase;\n    letter-spacing: .01em;\n}\n\n.bom-detail-table td {\n    height: 38px;\n    background: #fff;\n    font-size: 10px;\n}\n\n.bom-detail-table tbody tr:hover td {\n    background: #f8fafc;\n}\n\n.bom-detail-table .c-no { width: 55px; }\n.bom-detail-table .c-line { width: 220px; }\n.bom-detail-table .c-sheet { width: 105px; }\n.bom-detail-table .c-component { width: 130px; }\n.bom-detail-table .c-desc { width: 260px; }\n.bom-detail-table .c-qty { width: 90px; }\n.bom-detail-table .c-size { width: 100px; }\n.bom-detail-table .c-length { width: 110px; }\n.bom-detail-table .c-unit { width: 80px; }\n.bom-detail-table .c-inch { width: 120px; }\n\n.bom-detail-scroll::-webkit-scrollbar {\n    width: 10px;\n    height: 12px;\n}\n.bom-detail-scroll::-webkit-scrollbar-track {\n    background: #f1f5f9;\n}\n.bom-detail-scroll::-webkit-scrollbar-thumb {\n    background: #94a3b8;\n    border-radius: 8px;\n}\n.bom-detail-scroll::-webkit-scrollbar-thumb:hover {\n    background: #64748b;\n}\n
+
+/* CALCULATE BOM modal must sit above all sticky workspace headers */
+[x-show="showBomModal"] { z-index: 9999 !important; }
+.bom-detail-box { position: relative; z-index: 1; }
+.bom-detail-scroll { position: relative; z-index: 2; }
+
+
+/* ==========================================================
+   BOM MODAL OVERLAY - PALING ATAS
+   Mencegah sticky/freeze header tabel utama menembus modal.
+   ========================================================== */
+.bom-modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    isolation: isolate !important;
+    pointer-events: auto !important;
+}
+
+.bom-modal-overlay > div {
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+/* Saat modal BOM aktif, sticky column tabel workspace tidak boleh
+   membuat layer visual di atas overlay. */
+.bom-modal-overlay ~ * {
+    z-index: auto !important;
+}
+
+/* ==========================================================
+   CALCULATE BOM - READABLE TABLE V3
+   Jangan mengecilkan tabel hanya agar seluruh kolom muat.
+   Tabel tetap readable dan menggunakan horizontal scrollbar.
+   ========================================================== */
+.bom-modal-overlay {
+    z-index: 2147483647 !important;
+    isolation: isolate !important;
+}
+
+.bom-modal-overlay > div {
+    width: min(96vw, 1600px) !important;
+    max-width: 1600px !important;
+    max-height: 94vh !important;
+}
+
+.bom-modal-overlay .p-5.overflow-y-auto {
+    min-height: 0;
+}
+
+.bom-detail-box {
+    min-width: 0 !important;
+    width: 100% !important;
+}
+
+.bom-detail-scroll {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 52vh !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    scrollbar-width: auto;
+    scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.bom-detail-table {
+    width: 1680px !important;
+    min-width: 1680px !important;
+    max-width: none !important;
     table-layout: fixed !important;
     border-collapse: separate !important;
     border-spacing: 0 !important;
 }
 
-/* Lebar kolom dikontrol dari colgroup. */
-.excel-table col.c-no       { width: 56px; }
-.excel-table col.c-size     { width: 110px; }
-.excel-table col.c-fluid    { width: 155px; }
-.excel-table col.c-spec     { width: 95px; }
-.excel-table col.c-seq      { width: 95px; }
-.excel-table col.c-ins-type { width: 95px; }
-.excel-table col.c-ins-thick{ width: 105px; }
-
-.excel-table col.c-complete { width: 165px; }
-.excel-table col.c-pid      { width: 125px; }
-.excel-table col.c-from     { width: 220px; }
-.excel-table col.c-to       { width: 220px; }
-.excel-table col.c-service  { width: 145px; }
-.excel-table col.c-phase    { width: 95px; }
-.excel-table col.c-mass     { width: 145px; }
-.excel-table col.c-vol      { width: 145px; }
-.excel-table col.c-press    { width: 120px; }
-.excel-table col.c-temp     { width: 120px; }
-.excel-table col.c-density  { width: 125px; }
-.excel-table col.c-visc     { width: 110px; }
-.excel-table col.c-nde      { width: 100px; }
-.excel-table col.c-test-med { width: 120px; }
-.excel-table col.c-test-press { width: 130px; }
-.excel-table col.c-painting { width: 125px; }
-.excel-table col.c-pwht    { width: 100px; }
-.excel-table col.c-stress  { width: 155px; }
-.excel-table col.c-stress-calc { width: 190px; }
-.excel-table col.c-remarks { width: 180px; }
-.excel-table col.c-approval { width: 135px; }
-.excel-table col.c-action  { width: 70px; }
-
-.excel-table th,
-.excel-table td {
-    box-sizing: border-box;
-    height: 38px;
-    padding: 6px 8px;
-    border-right: 1px solid #cbd5e1;
-    border-bottom: 1px solid #cbd5e1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: clip;
-    vertical-align: middle;
-}
-
-.excel-table th:first-child,
-.excel-table td:first-child {
-    border-left: 1px solid #cbd5e1;
-}
-
-.excel-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-}
-
-.excel-table thead th {
-    background-color: #f8fafc;
-    color: #1e293b;
-    font-weight: 700;
-    text-align: center;
-    vertical-align: middle;
-    overflow: hidden;
-    text-overflow: clip;
-}
-
-/* =========================================================
-   STICKY / FREEZE
-   Penting: JANGAN gunakan nth-child untuk header karena
-   header memiliki rowspan/colspan. Gunakan class freeze-col.
-   ========================================================= */
-
-/* Lima header pertama */
-.excel-table thead .freeze-col-1,
-.excel-table tbody .freeze-col-1 {
-    position: sticky;
-    left: 0;
-    width: 56px;
-    min-width: 56px;
-    max-width: 56px;
-}
-
-.excel-table thead .freeze-col-2,
-.excel-table tbody .freeze-col-2 {
-    position: sticky;
-    left: 56px;
-    width: 110px;
-    min-width: 110px;
-    max-width: 110px;
-}
-
-.excel-table thead .freeze-col-3,
-.excel-table tbody .freeze-col-3 {
-    position: sticky;
-    left: 166px;
-    width: 155px;
-    min-width: 155px;
-    max-width: 155px;
-}
-
-.excel-table thead .freeze-col-4,
-.excel-table tbody .freeze-col-4 {
-    position: sticky;
-    left: 321px;
-    width: 95px;
-    min-width: 95px;
-    max-width: 95px;
-}
-
-.excel-table thead .freeze-col-5,
-.excel-table tbody .freeze-col-5 {
-    position: sticky;
-    left: 416px;
-    width: 95px;
-    min-width: 95px;
-    max-width: 95px;
-}
-
-.excel-table thead .freeze-col-6,
-.excel-table tbody .freeze-col-6 {
-    position: sticky;
-    left: 511px;
-    width: 95px;
-    min-width: 95px;
-    max-width: 95px;
-}
-
-.excel-table thead .freeze-col-7,
-.excel-table tbody .freeze-col-7 {
-    position: sticky;
-    left: 606px;
-    width: 105px;
-    min-width: 105px;
-    max-width: 105px;
-}
-
-/* Header group Insulation Section mencakup Type + Thickness. */
-.excel-table thead .freeze-insulation {
-    position: sticky;
-    left: 511px;
-    width: 200px;
-    min-width: 200px;
-    max-width: 200px;
-    z-index: 120;
-    background-color: #f8fafc;
-}
-
-/* Filter row dan body harus berada di atas kolom yang bergerak. */
-.excel-table tbody .freeze-col,
-.excel-table thead .freeze-col {
-    background-color: #f8fafc;
-}
-
-.excel-table tbody .freeze-col {
-    background-color: #fff;
-    z-index: 30;
-}
-
-.excel-table tbody tr:hover .freeze-col {
-    background-color: #eff6ff;
-}
-
-/* Header frozen berada paling depan. */
-.excel-table thead .freeze-col {
-    z-index: 130;
-}
-
-/* Filter row adalah baris ketiga header. */
-.excel-table thead tr.filter-row .freeze-col {
-    z-index: 140;
-    background-color: #f3f4f6;
-}
-
-/* Tidak ada shadow/warna pembeda di batas freeze. */
-.excel-table .freeze-col,
-.excel-table .freeze-insulation {
-    box-shadow: none !important;
-}
-
-/* Input tidak boleh membuat ukuran kolom berubah. */
-.excel-table input,
-.excel-table select,
-.excel-table button {
-    box-sizing: border-box;
-    max-width: 100%;
-}
-
-.excel-table th input,
-.excel-table td input,
-.excel-table th select,
-.excel-table td select {
-    width: 100%;
-    min-width: 0;
-}
-
-/* Jangan biarkan teks panjang mendorong kolom lain. */
-.excel-table td input {
-    overflow: hidden;
-    text-overflow: clip;
-}
-
-.line-list-scroll::-webkit-scrollbar {
-    width: 7px;
-    height: 9px;
-}
-.line-list-scroll::-webkit-scrollbar-track {
-    background: #f1f5f9;
-}
-.line-list-scroll::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-.line-list-scroll::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
-/* =========================================================
-   LINE SIZE - dropdown pilihan ukuran pipa
-   ========================================================= */
-.excel-table th.line-size-header::before,
-.excel-table th.line-size-header::after,
-.excel-table th.freeze-col-2::before,
-.excel-table th.freeze-col-2::after {
-    content: none !important;
-    display: none !important;
-}
-
-.excel-table td.freeze-col-2 select {
-    min-width: 100%;
-    height: 30px;
-    cursor: pointer;
-    background-color: #fff;
-    color: #0f172a;
-}
-
-.excel-table td.freeze-col-2 select:disabled {
-    cursor: not-allowed;
-    opacity: .75;
-}
-
-.excel-table td.freeze-col-2 select:focus {
-    outline: 2px solid rgba(37, 99, 235, .25);
-    outline-offset: -1px;
-}
-
-.excel-table th.size-filter-cell input {
-    background-image: none !important;
-}
-
-
-/* =========================================================
-   REVISI: DATA PANJANG + DUPLIKAT SEQ NO.
-   ========================================================= */
-.excel-table td input,
-.excel-table td textarea {
-    white-space: nowrap;
-}
-
-.excel-table td textarea.multi-line-cell {
-    resize: none;
-    overflow-x: auto;
-    overflow-y: hidden;
-    min-height: 30px;
-    line-height: 18px;
-    white-space: pre-wrap;
-    word-break: normal;
-}
-
-.excel-table td textarea.multi-line-cell:focus {
-    min-height: 54px;
-    height: 54px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    z-index: 250;
-    position: relative;
-}
-
-
-.excel-table input.duplicate-seq-input {
-    border: 2px solid #ef4444 !important;
-    background-color: #fee2e2 !important;
-    color: #b91c1c !important;
-    font-weight: 700;
-}
-
-/* =========================================================
-   NAMA PROJECT
-   - Tidak dianimasikan.
-   - Teks dimulai tepat setelah label.
-   - Ukuran font otomatis menyesuaikan agar seluruh nama project terlihat.
-   ========================================================= */
-.project-name-viewport {
-    position: relative;
-    flex: 1 1 auto;
-    width: 100%;
-    max-width: 560px;
-    min-width: 0;
-    overflow: hidden;
-    border-bottom: 1px dashed #cbd5e1;
-    min-height: 31px;
-    display: flex;
-    align-items: center;
-    justify-content: center !important;
-    text-align: center !important;
-    outline: none;
-    padding: 0 5px;
-}
-.project-name-value {
-    display: block;
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
+.bom-detail-table th,
+.bom-detail-table td {
+    box-sizing: border-box !important;
+    padding: 10px 12px !important;
+    height: 42px !important;
+    line-height: 1.35 !important;
+    font-size: 12px !important;
     white-space: nowrap !important;
-    text-align: center !important;
-    text-overflow: clip !important;
     overflow: hidden !important;
-    border-bottom: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    flex: 1 1 auto;
-    font-size: 13px !important;
-    line-height: 1.2 !important;
-    letter-spacing: -0.15px;
-}
-.project-name-viewport:focus-visible {
-    box-shadow: inset 0 -2px 0 #2563eb;
+    text-overflow: ellipsis !important;
+    vertical-align: middle !important;
+    border-right: 1px solid #dbe3ec !important;
+    border-bottom: 1px solid #dbe3ec !important;
 }
 
-/* Semua input text: satu baris, bisa digeser horizontal untuk melihat seluruh nilai. */
-.excel-table td input[type="text"],
-.excel-table td input[type="number"],
-.excel-table td input[inputmode="numeric"] {
-    overflow-x: hidden !important;
-    overflow-y: hidden !important;
-    text-overflow: clip !important;
+.bom-detail-table th {
+    height: 44px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    background: #f1f5f9 !important;
+    color: #1e293b !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 5 !important;
+}
+
+.bom-detail-table td {
+    background: #fff !important;
+    color: #334155 !important;
+}
+
+.bom-detail-table tbody tr:nth-child(even) td {
+    background: #f8fafc !important;
+}
+
+.bom-detail-table tbody tr:hover td {
+    background: #eef6e8 !important;
+}
+
+/* Lebar setiap kolom — tidak boleh collapse */
+.bom-detail-table .c-no { width: 60px !important; min-width: 60px !important; }
+.bom-detail-table .c-line { width: 250px !important; min-width: 250px !important; }
+.bom-detail-table .c-sheet { width: 120px !important; min-width: 120px !important; }
+.bom-detail-table .c-component { width: 150px !important; min-width: 150px !important; }
+.bom-detail-table .c-desc { width: 380px !important; min-width: 380px !important; }
+.bom-detail-table .c-qty { width: 95px !important; min-width: 95px !important; }
+.bom-detail-table .c-size { width: 105px !important; min-width: 105px !important; }
+.bom-detail-table .c-length { width: 115px !important; min-width: 115px !important; }
+.bom-detail-table .c-unit { width: 85px !important; min-width: 85px !important; }
+.bom-detail-table .c-inch { width: 125px !important; min-width: 125px !important; }
+
+.bom-detail-scroll::-webkit-scrollbar {
+    width: 11px !important;
+    height: 14px !important;
+}
+.bom-detail-scroll::-webkit-scrollbar-track {
+    background: #eef2f7 !important;
+    border-radius: 8px;
+}
+.bom-detail-scroll::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
+    border-radius: 8px;
+    border: 2px solid #eef2f7;
+}
+.bom-detail-scroll::-webkit-scrollbar-thumb:hover {
+    background: #64748b !important;
+}
+
+/* Ringkasan di atas modal juga dibuat sedikit lebih nyaman dibaca */
+.bom-modal-overlay .grid.grid-cols-2.md\:grid-cols-5 > div {
+    min-height: 74px;
+    padding: 14px !important;
+}
+.bom-modal-overlay .grid.grid-cols-2.md\:grid-cols-5 > div b {
+    font-size: 19px !important;
+}
+
+/* Final Calculate BOM readability + reliable footer click */
+.bom-detail-table { min-width: 1550px !important; width: 1550px !important; table-layout: fixed !important; }
+.bom-detail-table th { font-size: 11px !important; height: 42px !important; padding: 10px 12px !important; }
+.bom-detail-table td { font-size: 12px !important; height: 42px !important; padding: 10px 12px !important; }
+.bom-detail-table .c-no { width: 55px !important; }
+.bom-detail-table .c-line { width: 250px !important; }
+.bom-detail-table .c-sheet { width: 100px !important; }
+.bom-detail-table .c-component { width: 130px !important; }
+.bom-detail-table .c-desc { width: 400px !important; }
+.bom-detail-table .c-qty { width: 85px !important; }
+.bom-detail-table .c-size { width: 95px !important; }
+.bom-detail-table .c-length { width: 105px !important; }
+.bom-detail-table .c-unit { width: 75px !important; }
+.bom-detail-table .c-inch { width: 120px !important; }
+.bom-modal-overlay button { pointer-events: auto !important; }
+.bom-modal-overlay > div { pointer-events: auto !important; }
+.bom-detail-scroll { pointer-events: auto !important; }
+
+
+/* ==========================================================
+   ESTIMATOR BOQ MODAL - FIXED LAYER + READABLE DETAIL TABLE
+   Modal harus berada di atas sticky/freeze tabel workspace.
+   ========================================================== */
+.boq-modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    isolation: isolate !important;
+    pointer-events: auto !important;
+}
+
+.boq-modal-overlay > div {
+    position: relative !important;
+    z-index: 1 !important;
+    width: min(96vw, 1600px) !important;
+    max-width: 1600px !important;
+    max-height: 94vh !important;
+}
+
+.boq-modal-overlay .overflow-y-auto {
+    min-height: 0 !important;
+}
+
+.boq-detail-table {
+    width: 100% !important;
+    min-width: 1780px !important;
+    table-layout: fixed !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    font-size: 12px !important;
+    color: #334155 !important;
+}
+
+.boq-detail-table th,
+.boq-detail-table td {
+    box-sizing: border-box !important;
+    height: 42px !important;
+    padding: 9px 10px !important;
+    border-right: 1px solid #dbe3ec !important;
+    border-bottom: 1px solid #dbe3ec !important;
+    vertical-align: middle !important;
     white-space: nowrap !important;
-    scrollbar-width: none !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 
-/* P&ID, From, To: Enter = baris baru; teks panjang tidak wrap sendiri. */
-.excel-table td textarea.multi-line-cell {
-    resize: none;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    scrollbar-width: none !important;
-    min-height: 30px;
-    height: 30px;
-    line-height: 18px;
-    white-space: pre !important;
-    word-break: normal;
-    overflow-wrap: normal;
-    text-overflow: clip;
-}
-.excel-table td textarea.multi-line-cell:focus {
-    position: relative;
-    z-index: 250;
-    min-height: 30px;
-    height: 30px;
-    white-space: pre !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    scrollbar-width: none !important;
+.boq-detail-table th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 5 !important;
+    height: 44px !important;
+    background: #f1f5f9 !important;
+    color: #1e293b !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
 }
 
-/* Tidak ada scrollbar kecil di dalam setiap input. Pergeseran teks panjang
-   mengikuti caret/kursor keyboard (Left/Right), seperti input biasa. */
-.excel-table td input::-webkit-scrollbar,
-.excel-table td textarea::-webkit-scrollbar {
-    width: 0 !important;
-    height: 0 !important;
-    display: none !important;
-}
-.excel-table td input,
-.excel-table td textarea {
-    scrollbar-width: none !important;
-    text-overflow: clip !important;
+.boq-detail-table td {
+    background: #fff !important;
+    font-size: 12px !important;
 }
 
-/* Bila memang ada beberapa baris, textarea membesar secukupnya. */
-.excel-table td textarea.multi-line-cell.has-multiple-lines {
-    height: auto;
-    min-height: 30px;
-    overflow-y: auto !important;
-    white-space: pre !important;
+.boq-detail-table tbody tr:nth-child(even) td {
+    background: #f8fafc !important;
 }
 
-/* Tetap pertahankan freeze saat horizontal scroll. */
-.excel-table .freeze-col,
-.excel-table .freeze-insulation {
-    z-index: 30;
-}
-.excel-table thead .freeze-col {
-    z-index: 130;
-}
-.excel-table thead tr.filter-row .freeze-col {
-    z-index: 140;
+.boq-detail-table tbody tr:hover td {
+    background: #eef6e8 !important;
 }
 
-/* Final mentor revision: no mini horizontal scrollbars inside cells.
-   Long values are revealed by the main table auto-scroll and keyboard caret. */
-.excel-table td input,
-.excel-table td textarea {
-    scrollbar-width: none !important;
-}
-.excel-table td input::-webkit-scrollbar,
-.excel-table td textarea::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-}
-.excel-table td textarea.multi-line-cell {
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+.boq-detail-table .boq-no { width: 60px !important; min-width: 60px !important; text-align: center !important; }
+.boq-detail-table .boq-line { width: 240px !important; min-width: 240px !important; text-align: left !important; }
+.boq-detail-table .boq-sheet { width: 110px !important; min-width: 110px !important; text-align: left !important; }
+.boq-detail-table .boq-component { width: 140px !important; min-width: 140px !important; text-align: left !important; }
+.boq-detail-table .boq-description { width: 330px !important; min-width: 330px !important; text-align: left !important; }
+.boq-detail-table .boq-qty { width: 90px !important; min-width: 90px !important; text-align: right !important; }
+.boq-detail-table .boq-size { width: 95px !important; min-width: 95px !important; text-align: right !important; }
+.boq-detail-table .boq-length { width: 105px !important; min-width: 105px !important; text-align: right !important; }
+.boq-detail-table .boq-unit { width: 80px !important; min-width: 80px !important; text-align: center !important; }
+.boq-detail-table .boq-inch { width: 110px !important; min-width: 110px !important; text-align: right !important; }
+.boq-detail-table .boq-price { width: 150px !important; min-width: 150px !important; text-align: right !important; }
+.boq-detail-table .boq-total { width: 160px !important; min-width: 160px !important; text-align: right !important; font-weight: 700 !important; }
+
+.boq-price-input {
+    width: 125px !important;
+    margin-left: auto !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    padding: 7px 9px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+    font-size: 12px !important;
+    text-align: right !important;
+    outline: none !important;
 }
 
-/* FINAL MENTOR FIX: horizontal navigation is handled by the main table
-   scrollbar + keyboard focus. Never show a scrollbar inside individual cells. */
-.excel-table td input,
-.excel-table td textarea,
-.excel-table td select {
-    max-width: 100%;
-    box-sizing: border-box;
+.boq-price-input:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,.12) !important;
 }
-.excel-table td input,
-.excel-table td textarea {
-    text-overflow: clip !important;
+
+.boq-modal-overlay .custom-scrollbar {
+    scrollbar-width: auto !important;
+    scrollbar-color: #94a3b8 #f1f5f9 !important;
+}
+
+.boq-modal-overlay .custom-scrollbar::-webkit-scrollbar {
+    width: 10px !important;
+    height: 12px !important;
+}
+
+.boq-modal-overlay .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+}
+
+.boq-modal-overlay .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
+    border-radius: 8px !important;
 }
