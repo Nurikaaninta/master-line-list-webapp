@@ -405,6 +405,7 @@ function renderTableRows(proj) {
         if (!checkRowAgainstFilters(line)) return;
 
         const tr = document.createElement('tr');
+        tr.dataset.lineIndex = String(index);
         tr.className = "hover:bg-blue-50/50 transition border-b border-slate-100";
 
         tr.innerHTML = `
@@ -424,7 +425,7 @@ function renderTableRows(proj) {
         readonly
         tabindex="-1"
         title="Complete Line No. dibuat otomatis dari Line Size, Process Fluid Identifier, Pipe.Spec, Seq. No. dan Insulation."
-        class="w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/50 cursor-not-allowed"
+        class="complete-line-no w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/50 cursor-not-allowed"
     >
 </td>
             <td><input type="text" value="${line.pid}" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
@@ -500,7 +501,13 @@ function updateLineField(index, field, val) {
     // Complete Line No. selalu mengikuti field sumber dan tidak lagi diisi manual.
     line.complete_no = buildCompleteLineNo(line);
 
-    renderDashboard();
+    // Jangan render ulang seluruh tabel saat user sedang mengisi sel.
+    // Render ulang di sini membuat fokus berpindah/hilang sehingga Tab/Enter
+    // terasa seperti harus klik mouse lagi. Cukup update nilai Complete Line No.
+    // pada baris yang sedang diedit.
+    const row = document.querySelector(`#lineTableBody tr[data-line-index="${index}"]`);
+    const completeInput = row ? row.querySelector('.complete-line-no') : null;
+    if (completeInput) completeInput.value = line.complete_no;
 }
 
 function addLineRow() {
@@ -967,3 +974,78 @@ function switchDashboardTab(tabName) {
 document.addEventListener('DOMContentLoaded', () => {
     switchDashboardTab('studio');
 });
+
+// ==========================================
+// NAVIGASI KEYBOARD UNTUK TABEL LINE LIST
+// ==========================================
+// Tab / Shift+Tab : pindah ke sel editable berikut/sebelumnya.
+// Enter / Arrow Down : pindah ke sel pada baris berikutnya.
+// Shift+Enter / Arrow Up : pindah ke sel pada baris sebelumnya.
+// Complete Line No. readonly dan field disabled otomatis dilewati.
+function initLineTableKeyboardNavigation() {
+    if (window.__lineTableKeyboardNavigationReady) return;
+    window.__lineTableKeyboardNavigationReady = true;
+
+    document.addEventListener('keydown', (event) => {
+        const target = event.target;
+        if (!target || !target.closest('#lineTableBody')) return;
+        if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+        if (target.disabled || target.readOnly) return;
+
+        const tbody = document.getElementById('lineTableBody');
+        if (!tbody) return;
+
+        const rows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.dataset.lineIndex !== undefined);
+        const currentRow = target.closest('tr');
+        if (!currentRow) return;
+
+        const getEditable = (row) => Array.from(row.querySelectorAll('input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled])'))
+            .filter(el => el.offsetParent !== null);
+
+        const currentCells = getEditable(currentRow);
+        const currentColumn = currentCells.indexOf(target);
+
+        // Tab navigation: browser default sebenarnya sudah benar, tetapi
+        // kita ambil alih agar perpindahan tetap konsisten di dalam tabel.
+        if (event.key === 'Tab') {
+            const all = [];
+            rows.forEach(row => getEditable(row).forEach(el => all.push(el)));
+            const pos = all.indexOf(target);
+            if (pos === -1) return;
+
+            const nextPos = event.shiftKey ? pos - 1 : pos + 1;
+            if (nextPos >= 0 && nextPos < all.length) {
+                event.preventDefault();
+                all[nextPos].focus({ preventScroll: true });
+                all[nextPos].select?.();
+                const row = all[nextPos].closest('tr');
+                if (row) row.scrollIntoView({ block: 'nearest' });
+            }
+            return;
+        }
+
+        // Enter / Arrow Up / Arrow Down: pertahankan kolom, pindah baris.
+        if (event.key === 'Enter' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            // Untuk textarea, Enter tetap digunakan untuk membuat baris baru.
+            if (event.key === 'Enter' && target.tagName === 'TEXTAREA') return;
+
+            let rowIndex = rows.indexOf(currentRow);
+            if (rowIndex === -1) return;
+
+            const direction = (event.key === 'ArrowUp' || (event.key === 'Enter' && event.shiftKey)) ? -1 : 1;
+            const nextRow = rows[rowIndex + direction];
+            if (!nextRow) return;
+
+            const nextCells = getEditable(nextRow);
+            const nextCell = nextCells[Math.min(Math.max(currentColumn, 0), nextCells.length - 1)];
+            if (!nextCell) return;
+
+            event.preventDefault();
+            nextCell.focus({ preventScroll: true });
+            nextCell.select?.();
+            nextRow.scrollIntoView({ block: 'nearest' });
+        }
+    });
+}
+
+initLineTableKeyboardNavigation();
