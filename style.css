@@ -25,7 +25,7 @@ body {
 .excel-table {
     width: max-content !important;
     min-width: 100%;
-    table-layout: fixed !important;
+    table-layout: auto !important;
     border-collapse: separate !important;
     border-spacing: 0 !important;
 }
@@ -525,7 +525,7 @@ body {
 /* Lebar P&ID dibuat sedikit lebih lega agar nomor P&ID yang panjang
    lebih mudah dibaca; From/To tetap mempertahankan lebar tabel. */
 .excel-table col.c-pid  { width: 170px !important; }
-.excel-table col.c-from { width: 240px !important; }
+.excel-table col.c-from { width: 240px; min-width: 240px; }
 .excel-table col.c-to   { width: 240px !important; }
 
 /* MENTOR REVISION: long P&ID / From / To values stay on one visual line.
@@ -549,47 +549,118 @@ body {
 }
 
 
-/* =========================================================
-   PROJECT 1 — P&ID / FROM / TO FINAL BEHAVIOUR
-   - One value = exactly one visual line.
-   - ENTER creates another value/line in the same cell.
-   - Long values NEVER wrap into two visual lines.
-   - Horizontal scrolling follows the caret automatically.
-   - Does not change table/column widths.
-   ========================================================= */
-.excel-table td textarea.multi-line-cell {
-    display: block !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    box-sizing: border-box !important;
-    resize: none !important;
+/* Auto-fit columns: width is calculated from the longest visible text in JS. */
+.excel-table col { max-width: none !important; }
+.excel-table th,
+.excel-table td { min-width: 0; }
+.excel-table .freeze-col,
+.excel-table .freeze-insulation { max-width: none !important; }
 
-    /* Critical: never wrap long text. */
+/* FINAL FIX - FROM COLUMN
+   Lebar kolom FROM mengikuti teks terpanjang dan tidak dipotong.
+   Hanya kolom FROM yang diubah pada revisi ini. */
+.excel-table col.c-from {
+    max-width: none !important;
+}
+.excel-table td:nth-child(10) textarea.multi-line-cell {
     white-space: pre !important;
     overflow-wrap: normal !important;
     word-break: normal !important;
     word-wrap: normal !important;
-    text-overflow: clip !important;
-
-    /* Multiple ENTER-separated values are allowed. */
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-
-    line-height: 18px !important;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-    background-clip: padding-box !important;
+    resize: none !important;
 }
 
-.excel-table td textarea.multi-line-cell::-webkit-scrollbar {
-    width: 0 !important;
-    height: 0 !important;
-    display: none !important;
+
+/* FINAL FIX - SHOW COMPLETE TEXT IN FROM / TO
+   Lebar kolom mengikuti isi terpanjang. Teks tidak dipaksa masuk ke 240px. */
+.excel-table col.c-from,
+.excel-table col.c-to {
+    width: 420px !important;
+    min-width: 420px !important;
+    max-width: none !important;
 }
 
-/* Keep the table layout unchanged; only the cell height follows
-   the number of ENTER-separated values. */
-.excel-table td:has(> textarea.multi-line-cell) {
-    vertical-align: top !important;
+.excel-table th:nth-child(10),
+.excel-table td:nth-child(10),
+.excel-table th:nth-child(11),
+.excel-table td:nth-child(11) {
+    width: 420px !important;
+    min-width: 420px !important;
+    max-width: none !important;
     overflow: visible !important;
+}
+
+.excel-table td:nth-child(10) textarea.multi-line-cell,
+.excel-table td:nth-child(11) textarea.multi-line-cell {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    overflow: hidden !important;
+    white-space: pre !important;
+    text-overflow: clip !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+}
+
+
+/* =========================================================
+   FINAL FIX - P&ID / FROM / TO MUST NEVER CUT DATA
+   - Text may wrap inside the cell when needed.
+   - Cell/textarea height follows the complete content.
+   - No internal scrollbar and no overlap between adjacent rows.
+   - From/To keep a comfortable width but are not forced to one line.
+   ========================================================= */
+.excel-table {
+    table-layout: auto !important;
+}
+
+.excel-table col.c-pid {
+    width: 190px !important;
+    min-width: 190px !important;
+}
+
+.excel-table col.c-from,
+.excel-table col.c-to {
+    width: 520px !important;
+    min-width: 520px !important;
+    max-width: none !important;
+}
+
+.excel-table th:nth-child(9),
+.excel-table td:nth-child(9),
+.excel-table th:nth-child(10),
+.excel-table td:nth-child(10),
+.excel-table th:nth-child(11),
+.excel-table td:nth-child(11) {
+    min-width: 0 !important;
+    max-width: none !important;
+    overflow: visible !important;
+    vertical-align: top !important;
+}
+
+.excel-table td:nth-child(9) textarea.multi-line-cell,
+.excel-table td:nth-child(10) textarea.multi-line-cell,
+.excel-table td:nth-child(11) textarea.multi-line-cell {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 30px !important;
+    max-height: none !important;
+    box-sizing: border-box !important;
+    resize: none !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    word-wrap: break-word !important;
+    overflow: hidden !important;
+    text-overflow: clip !important;
+    line-height: 18px !important;
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+}
+
+.excel-table tbody tr {
+    height: auto !important;
 }

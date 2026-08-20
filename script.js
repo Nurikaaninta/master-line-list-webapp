@@ -459,15 +459,15 @@ function renderTableRows(proj) {
     >
 </td>
             <td>
-                <textarea rows="1" wrap="off" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
+                <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.pid)}">${escapeHtml(line.pid)}</textarea>
             </td>
             <td>
-                <textarea rows="1" wrap="off" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''}
+                <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.from)}">${escapeHtml(line.from)}</textarea>
             </td>
             <td>
-                <textarea rows="1" wrap="off" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''}
+                <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.to)}">${escapeHtml(line.to)}</textarea>
             </td>
             <td><input type="text" value="${line.service}" onchange="updateLineField(${index}, 'service', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
@@ -518,6 +518,10 @@ function renderTableRows(proj) {
     } else {
         managerArea.classList.add('hidden');
     }
+
+    // Setelah tbody selesai dibuat, hitung ulang lebar kolom FROM berdasarkan
+    // teks terpanjang agar tidak terpotong.
+    scheduleLineListAutoFit();
 }
 
 function updateLineField(index, field, val) {
@@ -1259,178 +1263,208 @@ function initLongContentAutoScroll() {
     if (window.__longContentAutoScrollReady) return;
     window.__longContentAutoScrollReady = true;
 
+    // Make P&ID / From / To expand vertically so every character remains visible.
+    // Long text wraps instead of being clipped or hidden behind the next row.
     const autoGrowTextarea = (el) => {
         if (!el || el.tagName !== 'TEXTAREA' || !el.classList.contains('multi-line-cell')) return;
 
-        // Revisi mentor:
-        // Satu data = satu baris visual, meskipun teksnya panjang.
-        // Enter adalah satu-satunya cara membuat data/baris berikutnya.
-        const value = String(el.value || '');
-        const lineCount = Math.max(1, value.split(/\r?\n/).length);
+        el.setAttribute('wrap', 'soft');
+        el.style.setProperty('height', 'auto', 'important');
+        el.style.setProperty('min-height', '30px', 'important');
+        el.style.setProperty('max-height', 'none', 'important');
+        el.style.setProperty('overflow-y', 'hidden', 'important');
+        el.style.setProperty('overflow-x', 'hidden', 'important');
+        el.style.setProperty('white-space', 'pre-wrap', 'important');
+        el.style.setProperty('overflow-wrap', 'anywhere', 'important');
+        el.style.setProperty('word-break', 'break-word', 'important');
+        el.style.setProperty('word-wrap', 'break-word', 'important');
 
-        const cs = window.getComputedStyle(el);
-        const lineHeight = Number.parseFloat(cs.lineHeight) || 18;
-        const paddingTop = Number.parseFloat(cs.paddingTop) || 0;
-        const paddingBottom = Number.parseFloat(cs.paddingBottom) || 0;
-        const borderTop = Number.parseFloat(cs.borderTopWidth) || 0;
-        const borderBottom = Number.parseFloat(cs.borderBottomWidth) || 0;
-
-        const height = Math.max(
-            30,
-            Math.ceil(lineCount * lineHeight + paddingTop + paddingBottom + borderTop + borderBottom)
-        );
-
-        el.style.height = `${height}px`;
-        el.style.minHeight = `${height}px`;
-        el.style.maxHeight = `${height}px`;
-        el.style.whiteSpace = 'pre';
-        el.style.overflowWrap = 'normal';
-        el.style.wordBreak = 'normal';
-        el.style.wordWrap = 'normal';
-        el.style.overflowX = 'auto';
-        el.style.overflowY = 'hidden';
-        el.setAttribute('wrap', 'off');
-        el.classList.toggle('has-multiple-lines', lineCount > 1);
+        // scrollHeight is the reliable browser measurement for wrapped text.
+        const height = Math.max(30, el.scrollHeight + 2);
+        el.style.setProperty('height', `${height}px`, 'important');
+        el.style.setProperty('min-height', `${height}px`, 'important');
+        el.classList.toggle('has-multiple-lines', String(el.value || '').includes('\n'));
     };
 
-    // Scroll tabel utama berdasarkan posisi kolom, bukan getBoundingClientRect().
-    // Ini penting karena kolom freeze menggunakan position: sticky.
-    // Target P&ID / From / To akan selalu masuk penuh ke area setelah freeze.
     const revealCellHorizontally = (el) => {
         const scroller = el?.closest('.line-list-scroll');
         const cell = el?.closest('td, th');
         if (!scroller || !cell) return;
-
-        const frozen = cell.classList.contains('freeze-col') ||
-                       cell.classList.contains('freeze-insulation');
-        if (frozen) return;
+        if (cell.classList.contains('freeze-col') || cell.classList.contains('freeze-insulation')) return;
 
         const table = cell.closest('table');
         if (!table) return;
-
-        const cells = Array.from(cell.parentElement.children);
         const columnIndex = cell.cellIndex;
         if (columnIndex < 0) return;
 
-        // Ambil lebar kolom dari colgroup agar tidak terpengaruh sticky position.
-        const colgroup = table.querySelector('colgroup');
-        const cols = colgroup ? Array.from(colgroup.children) : [];
+        const cols = Array.from(table.querySelectorAll('colgroup col'));
         let targetLeft = 0;
-        let targetWidth = cell.getBoundingClientRect().width;
         for (let i = 0; i < columnIndex; i++) {
-            const col = cols[i];
-            targetLeft += col ? col.getBoundingClientRect().width : (cells[i]?.getBoundingClientRect().width || 0);
+            targetLeft += cols[i]?.getBoundingClientRect().width || 0;
         }
-        if (cols[columnIndex]) {
-            targetWidth = cols[columnIndex].getBoundingClientRect().width;
-        }
+        const targetWidth = cols[columnIndex]?.getBoundingClientRect().width || cell.getBoundingClientRect().width;
+        const frozenWidth = cols.slice(0, 7).reduce((sum, col) => sum + (col?.getBoundingClientRect().width || 0), 0);
+        const visibleLeft = scroller.scrollLeft + frozenWidth;
+        const visibleRight = scroller.scrollLeft + scroller.clientWidth;
+        const desiredLeft = Math.max(frozenWidth, targetLeft);
+        const desiredRight = targetLeft + targetWidth;
 
-        // Freeze = No + Line Size + Fluid + Spec + Seq + Insulation Type + Thickness.
-        let frozenWidth = 0;
-        for (let i = 0; i < 7; i++) {
-            const col = cols[i];
-            frozenWidth += col ? col.getBoundingClientRect().width : 0;
-        }
-
-        const visibleRight = scroller.clientWidth;
-        const currentScroll = scroller.scrollLeft;
-        const targetVisibleLeft = targetLeft - currentScroll;
-        const targetVisibleRight = targetVisibleLeft + targetWidth;
-        const gap = 8;
-
-        // Jika target berada di bawah/menempel area freeze, geser ke kiri.
-        if (targetVisibleLeft < frozenWidth + gap) {
-            scroller.scrollLeft = Math.max(0, targetLeft - frozenWidth - gap);
-            return;
-        }
-
-        // Jika target terpotong di kanan, geser secukupnya agar seluruh kolom terlihat.
-        if (targetVisibleRight > visibleRight - gap) {
-            scroller.scrollLeft = Math.max(0, targetLeft + targetWidth - visibleRight + gap);
+        if (desiredLeft < visibleLeft) {
+            scroller.scrollLeft = Math.max(0, desiredLeft - frozenWidth - 12);
+        } else if (desiredRight > visibleRight) {
+            scroller.scrollLeft = Math.max(0, desiredRight - scroller.clientWidth + 12);
         }
     };
 
-    document.addEventListener('focusin', (event) => {
-        const el = event.target;
-        if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
-
-        if (el.id === 'headerProjectName') {
-            return;
-        }
-
+    const ensureCaretVisibleInCell = (el) => {
+        if (!el || !el.matches?.('.excel-table td input, .excel-table td textarea')) return;
         revealCellHorizontally(el);
-        if (el.tagName === 'TEXTAREA') autoGrowTextarea(el);
-        // Reveal the actual caret, not always the end of the value.
-        requestAnimationFrame(() => ensureCaretVisibleInCell(el));
-    });
+    };
 
-    document.addEventListener('keydown', (event) => {
-        const el = event.target;
-        if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
-
-        // Tab/Shift+Tab: browser memindahkan fokus, lalu focusin menjalankan reveal.
-        // Enter pada P&ID/From/To tetap membuat baris baru.
-        if (el.id === 'headerProjectName' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-            requestAnimationFrame(() => {
-                el.scrollLeft = event.key === 'Home' ? 0 : event.key === 'End' ? el.scrollWidth : el.scrollLeft;
-            });
-            return;
-        }
-
-        if (el.matches?.('.excel-table td input, .excel-table td textarea')) {
-            // Keyboard arrows/Home/End must move the visible text exactly like
-            // the project-name field, without showing a small scrollbar.
-            requestAnimationFrame(() => {
-                revealCellHorizontally(el);
-                ensureCaretVisibleInCell(el);
-            });
-        }
-    });
+    window.__lineListAutoGrowTextarea = autoGrowTextarea;
+    window.__lineListRevealCell = revealCellHorizontally;
+    window.__lineListEnsureCaret = ensureCaretVisibleInCell;
 
     document.addEventListener('input', (event) => {
         const el = event.target;
-        if (!el) return;
-        if (el.tagName === 'TEXTAREA' && el.classList.contains('multi-line-cell')) {
+        if (el?.tagName === 'TEXTAREA' && el.classList.contains('multi-line-cell')) {
             autoGrowTextarea(el);
+            scheduleLineListAutoFit();
         }
-        if (el.matches?.('.excel-table td input, .excel-table td textarea')) {
+    }, true);
+
+    document.addEventListener('focusin', (event) => {
+        const el = event.target;
+        if (el?.matches?.('.excel-table td input, .excel-table td textarea')) {
             requestAnimationFrame(() => {
                 revealCellHorizontally(el);
                 ensureCaretVisibleInCell(el);
             });
-        }
-    });
-
-    document.addEventListener('mouseenter', (event) => {
-        const el = event.target;
-        if (!el) return;
-
-        if (el.id === 'headerProjectName') return;
-
-        if (el.matches?.('.excel-table td input, .excel-table td textarea')) {
-            revealCellHorizontally(el);
+            if (el.tagName === 'TEXTAREA') autoGrowTextarea(el);
         }
     }, true);
 
-    // Pastikan P&ID / From / To yang sudah tersimpan dengan Enter tampil penuh
-    // tanpa mengubah isi datanya.
+    document.addEventListener('mouseenter', (event) => {
+        const el = event.target;
+        if (el?.matches?.('.excel-table td input, .excel-table td textarea')) revealCellHorizontally(el);
+    }, true);
+
     document.querySelectorAll('.multi-line-cell').forEach(autoGrowTextarea);
 
-    // renderDashboard() mengganti isi tbody. Observer memastikan textarea baru
-    // langsung menyesuaikan tinggi tanpa menunggu user klik.
     const lineBody = document.getElementById('lineTableBody');
     if (lineBody && !lineBody.__multiLineObserverReady) {
         lineBody.__multiLineObserverReady = true;
         const observer = new MutationObserver(() => {
             lineBody.querySelectorAll('.multi-line-cell').forEach(autoGrowTextarea);
+            scheduleLineListAutoFit();
         });
         observer.observe(lineBody, { childList: true, subtree: true });
+        scheduleLineListAutoFit();
+    }
+
+    if (!window.__lineListAutoFitResizeReady) {
+        window.__lineListAutoFitResizeReady = true;
+        window.addEventListener('resize', () => {
+            document.querySelectorAll('.multi-line-cell').forEach(autoGrowTextarea);
+            scheduleLineListAutoFit();
+        });
     }
 }
 
 
+/* =========================================================
+   AUTO-FIT LINE LIST COLUMNS
+   Kolom mengikuti teks terpanjang yang tampil. Tidak ada
+   pemotongan teks; tabel tetap horizontal-scrollable.
+   ========================================================= */
+function autoFitLineListColumns() {
+    const table = document.querySelector('.excel-table');
+    if (!table) return;
+
+    const colgroup = table.querySelector('.line-list-colgroup');
+    const fromCol = colgroup?.querySelector('col.c-from');
+    const toCol = colgroup?.querySelector('col.c-to');
+    if (!fromCol || !toCol) return;
+
+    const project = (typeof projectsData !== 'undefined' && typeof currentProjectIndex !== 'undefined')
+        ? projectsData[currentProjectIndex]
+        : null;
+    const lines = project && Array.isArray(project.lines) ? project.lines : [];
+
+    const measure = document.createElement('span');
+    Object.assign(measure.style, {
+        position: 'fixed', left: '-100000px', top: '-100000px',
+        visibility: 'hidden', whiteSpace: 'pre', display: 'inline-block',
+        padding: '0', margin: '0'
+    });
+    document.body.appendChild(measure);
+
+    const reference = table.querySelector('tbody td:nth-child(10) textarea') || table;
+    const cs = getComputedStyle(reference);
+    measure.style.font = cs.font;
+    measure.style.fontFamily = cs.fontFamily;
+    measure.style.fontSize = cs.fontSize;
+    measure.style.fontWeight = cs.fontWeight;
+    measure.style.letterSpacing = cs.letterSpacing;
+
+    const getWidth = (field, fallback) => {
+        const values = lines.length
+            ? lines.map(line => String(line?.[field] ?? ''))
+            : Array.from(table.querySelectorAll(`tbody td:nth-child(${field === 'from' ? 10 : 11}) textarea`)).map(el => String(el.value ?? ''));
+        let max = fallback;
+        for (const value of values) {
+            for (const part of value.replace(/\r/g, '').split('\n')) {
+                measure.textContent = part || ' ';
+                max = Math.max(max, Math.ceil(measure.getBoundingClientRect().width) + 34);
+            }
+        }
+        return Math.max(fallback, Math.min(max, 700));
+    };
+
+    // Keep the table practical; wrapping is enabled, so values remain fully visible.
+    const fromWidth = getWidth('from', 520);
+    const toWidth = getWidth('to', 520);
+    measure.remove();
+
+    const apply = (col, selector, width) => {
+        col.style.setProperty('width', `${width}px`, 'important');
+        col.style.setProperty('min-width', `${width}px`, 'important');
+        col.style.setProperty('max-width', 'none', 'important');
+        table.querySelectorAll(selector).forEach(cell => {
+            cell.style.setProperty('width', `${width}px`, 'important');
+            cell.style.setProperty('min-width', `${width}px`, 'important');
+            cell.style.setProperty('max-width', 'none', 'important');
+            cell.style.setProperty('overflow', 'visible', 'important');
+            const textarea = cell.querySelector('textarea');
+            if (textarea) {
+                textarea.style.setProperty('width', '100%', 'important');
+                textarea.style.setProperty('min-width', '0', 'important');
+                textarea.style.setProperty('max-width', 'none', 'important');
+                textarea.style.setProperty('white-space', 'pre-wrap', 'important');
+                textarea.style.setProperty('overflow-wrap', 'anywhere', 'important');
+                textarea.style.setProperty('word-break', 'break-word', 'important');
+                textarea.style.setProperty('overflow', 'hidden', 'important');
+                if (typeof window.__lineListAutoGrowTextarea === 'function') window.__lineListAutoGrowTextarea(textarea);
+            }
+        });
+    };
+
+    apply(fromCol, 'tbody td:nth-child(10)', fromWidth);
+    apply(toCol, 'tbody td:nth-child(11)', toWidth);
+}
+
+
+function scheduleLineListAutoFit() {
+    if (window.__lineListAutoFitFrame) return;
+    window.__lineListAutoFitFrame = requestAnimationFrame(() => {
+        window.__lineListAutoFitFrame = null;
+        autoFitLineListColumns();
+    });
+}
+
+
 // Final initialization for automatic horizontal reveal of long data.
-document.addEventListener("DOMContentLoaded", () => { initLongContentAutoScroll(); initProjectNameMarquee(); });
+document.addEventListener("DOMContentLoaded", () => { initLongContentAutoScroll(); initProjectNameMarquee(); scheduleLineListAutoFit(); });
 
 // Nama Project: klik area nama untuk fokus navigasi keyboard tanpa mengedit nilainya.
 document.addEventListener('click', (event) => {
