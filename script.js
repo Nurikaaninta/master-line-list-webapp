@@ -459,15 +459,15 @@ function renderTableRows(proj) {
     >
 </td>
             <td>
-                <textarea rows="1" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
+                <textarea rows="1" wrap="off" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.pid)}">${escapeHtml(line.pid)}</textarea>
             </td>
             <td>
-                <textarea rows="1" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''}
+                <textarea rows="1" wrap="off" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.from)}">${escapeHtml(line.from)}</textarea>
             </td>
             <td>
-                <textarea rows="1" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''}
+                <textarea rows="1" wrap="off" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.to)}">${escapeHtml(line.to)}</textarea>
             </td>
             <td><input type="text" value="${line.service}" onchange="updateLineField(${index}, 'service', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
@@ -1266,7 +1266,7 @@ function initLongContentAutoScroll() {
         // Satu data = satu baris visual, meskipun teksnya panjang.
         // Enter adalah satu-satunya cara membuat data/baris berikutnya.
         const value = String(el.value || '');
-        const lineCount = Math.max(1, value.split('\\n').length);
+        const lineCount = Math.max(1, value.split(/\r?\n/).length);
 
         const cs = window.getComputedStyle(el);
         const lineHeight = Number.parseFloat(cs.lineHeight) || 18;

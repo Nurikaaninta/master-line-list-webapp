@@ -547,3 +547,49 @@ body {
 .excel-table td textarea.multi-line-cell::-webkit-scrollbar {
     display: none !important;
 }
+
+
+/* =========================================================
+   PROJECT 1 — P&ID / FROM / TO FINAL BEHAVIOUR
+   - One value = exactly one visual line.
+   - ENTER creates another value/line in the same cell.
+   - Long values NEVER wrap into two visual lines.
+   - Horizontal scrolling follows the caret automatically.
+   - Does not change table/column widths.
+   ========================================================= */
+.excel-table td textarea.multi-line-cell {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    resize: none !important;
+
+    /* Critical: never wrap long text. */
+    white-space: pre !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+    text-overflow: clip !important;
+
+    /* Multiple ENTER-separated values are allowed. */
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+
+    line-height: 18px !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    background-clip: padding-box !important;
+}
+
+.excel-table td textarea.multi-line-cell::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}
+
+/* Keep the table layout unchanged; only the cell height follows
+   the number of ENTER-separated values. */
+.excel-table td:has(> textarea.multi-line-cell) {
+    vertical-align: top !important;
+    overflow: visible !important;
+}
