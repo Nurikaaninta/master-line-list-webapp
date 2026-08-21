@@ -39,11 +39,11 @@ body {
 .excel-table col.c-ins-type { width: 95px; }
 .excel-table col.c-ins-thick{ width: 105px; }
 
-.excel-table col.c-complete { width: 165px; }
+.excel-table col.c-complete { width: 220px; min-width: 220px; }
 .excel-table col.c-pid      { width: 125px; }
 .excel-table col.c-from     { width: 220px; }
 .excel-table col.c-to       { width: 220px; }
-.excel-table col.c-service  { width: 145px; }
+.excel-table col.c-service  { width: 180px; }
 .excel-table col.c-phase    { width: 95px; }
 .excel-table col.c-mass     { width: 145px; }
 .excel-table col.c-vol      { width: 145px; }
@@ -229,6 +229,42 @@ body {
 .excel-table td input {
     overflow: hidden;
     text-overflow: clip;
+}
+
+
+/* From / To / Fluid Service: lebar mengikuti isi terpanjang dan seluruh isi dipusatkan. */
+.excel-table col.c-from,
+.excel-table col.c-to,
+.excel-table col.c-service {
+    width: max-content;
+    min-width: 180px;
+}
+
+.excel-table td:nth-child(10),
+.excel-table td:nth-child(11),
+.excel-table td:nth-child(12) {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+.excel-table td:nth-child(10) textarea,
+.excel-table td:nth-child(11) textarea,
+.excel-table td:nth-child(12) input {
+    text-align: center !important;
+}
+
+.excel-table td:nth-child(10) textarea,
+.excel-table td:nth-child(11) textarea {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    resize: none !important;
+}
+
+.excel-table td:nth-child(10) textarea:focus,
+.excel-table td:nth-child(11) textarea:focus {
+    overflow-x: auto !important;
 }
 
 .line-list-scroll::-webkit-scrollbar {

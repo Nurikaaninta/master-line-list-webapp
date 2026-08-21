@@ -441,19 +441,19 @@ function renderTableRows(proj) {
         tr.innerHTML = `
             <td class="freeze-col freeze-col-1 text-center font-bold text-slate-500">${index + 1}</td>
             <td class="freeze-col freeze-col-2">${renderLineSizeSelect(line, index, canEdit)}</td>
-            <td class="freeze-col freeze-col-3"><input type="text" value="${line.fluid_id}" onchange="updateLineField(${index}, 'fluid_id', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
-            <td class="freeze-col freeze-col-4"><input type="text" value="${line.spec}" onchange="updateLineField(${index}, 'spec', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
-            <td class="freeze-col freeze-col-5"><input type="number" min="0" step="1" inputmode="numeric" value="${String(line.seq ?? '').replace(/\D/g, '')}" oninput="this.value=this.value.replace(/\D/g,'')" onchange="updateLineField(${index}, 'seq', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
+            <td class="freeze-col freeze-col-3"><input type="text" value="${line.fluid_id}" oninput="updateLineField(${index}, 'fluid_id', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
+            <td class="freeze-col freeze-col-4"><input type="text" value="${line.spec}" oninput="updateLineField(${index}, 'spec', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
+            <td class="freeze-col freeze-col-5"><input type="number" min="0" step="1" inputmode="numeric" value="${String(line.seq ?? '').replace(/\D/g, '')}" oninput="this.value=this.value.replace(/\D/g,''); updateLineField(${index}, 'seq', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
-            <td class="freeze-col freeze-col-6"><input type="text" value="${escapeHtmlAttr(line.ins_type)}" oninput="this.value=this.value.toUpperCase()" onchange="updateLineField(${index}, 'ins_type', this.value.toUpperCase())" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
-            <td class="freeze-col freeze-col-7"><input type="number" min="0" step="any" inputmode="decimal" value="${String(line.ins_thick ?? '').replace(/[^0-9.]/g, '')}" oninput="this.value=this.value.replace(/[^0-9.]/g,'')" onchange="updateLineField(${index}, 'ins_thick', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
+            <td class="freeze-col freeze-col-6"><input type="text" value="${escapeHtmlAttr(line.ins_type)}" oninput="this.value=this.value.toUpperCase(); updateLineField(${index}, 'ins_type', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
+            <td class="freeze-col freeze-col-7"><input type="number" min="0" step="any" inputmode="decimal" value="${String(line.ins_thick ?? '').replace(/[^0-9.]/g, '')}" oninput="this.value=this.value.replace(/[^0-9.]/g,''); updateLineField(${index}, 'ins_thick', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
             <td>
     <input
         type="text"
         value='${escapeHtmlAttr(isDuplicateSeq ? "" : buildCompleteLineNo(line, proj.lines, index))}'
         readonly
-        tabindex="-1"
+        tabindex="0"
         title="Complete Line No. dibuat otomatis dari Line Size, Process Fluid Identifier, Pipe.Spec, Seq. No. dan Insulation."
         class="complete-line-no w-full px-1.5 py-1 border rounded text-xs font-bold font-mono text-blue-700 bg-blue-50/50 cursor-not-allowed"
     >
@@ -1078,7 +1078,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Tab / Shift+Tab : pindah ke sel editable berikut/sebelumnya.
 // Enter / Arrow Down : pindah ke sel pada baris berikutnya.
 // Shift+Enter / Arrow Up : pindah ke sel pada baris sebelumnya.
-// Complete Line No. readonly dan field disabled otomatis dilewati.
+// Complete Line No. readonly tetap bisa dilihat saat navigasi; tidak dapat diedit.
 function initLineTableKeyboardNavigation() {
     if (window.__lineTableKeyboardNavigationReady) return;
     window.__lineTableKeyboardNavigationReady = true;
@@ -1105,17 +1105,18 @@ function initLineTableKeyboardNavigation() {
         const currentRow = target.closest('tr');
         if (!currentRow) return;
 
-        const getEditable = (row) => Array.from(row.querySelectorAll('input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled])'))
-            .filter(el => el.offsetParent !== null);
+        const getNavigable = (row) => Array.from(row.querySelectorAll('input:not([disabled]), select:not([disabled]), textarea:not([disabled])'))
+            .filter(el => el.offsetParent !== null)
+            .filter(el => !el.readOnly || el.classList.contains('complete-line-no'));
 
-        const currentCells = getEditable(currentRow);
+        const currentCells = getNavigable(currentRow);
         const currentColumn = currentCells.indexOf(target);
 
         // Tab navigation: browser default sebenarnya sudah benar, tetapi
         // kita ambil alih agar perpindahan tetap konsisten di dalam tabel.
         if (event.key === 'Tab') {
             const all = [];
-            rows.forEach(row => getEditable(row).forEach(el => all.push(el)));
+            rows.forEach(row => getNavigable(row).forEach(el => all.push(el)));
             const pos = all.indexOf(target);
             if (pos === -1) return;
 
@@ -1142,7 +1143,7 @@ function initLineTableKeyboardNavigation() {
             const nextRow = rows[rowIndex + direction];
             if (!nextRow) return;
 
-            const nextCells = getEditable(nextRow);
+            const nextCells = getNavigable(nextRow);
             const nextCell = nextCells[Math.min(Math.max(currentColumn, 0), nextCells.length - 1)];
             if (!nextCell) return;
 
@@ -1382,9 +1383,11 @@ function autoFitLineListColumns() {
     if (!table) return;
 
     const colgroup = table.querySelector('.line-list-colgroup');
+    const completeCol = colgroup?.querySelector('col.c-complete');
     const fromCol = colgroup?.querySelector('col.c-from');
     const toCol = colgroup?.querySelector('col.c-to');
-    if (!fromCol || !toCol) return;
+    const serviceCol = colgroup?.querySelector('col.c-service');
+    if (!completeCol || !fromCol || !toCol || !serviceCol) return;
 
     const project = (typeof projectsData !== 'undefined' && typeof currentProjectIndex !== 'undefined')
         ? projectsData[currentProjectIndex]
@@ -1407,23 +1410,25 @@ function autoFitLineListColumns() {
     measure.style.fontWeight = cs.fontWeight;
     measure.style.letterSpacing = cs.letterSpacing;
 
-    const getWidth = (field, fallback) => {
+    const getWidth = (field, fallback, selector) => {
         const values = lines.length
             ? lines.map(line => String(line?.[field] ?? ''))
-            : Array.from(table.querySelectorAll(`tbody td:nth-child(${field === 'from' ? 10 : 11}) textarea`)).map(el => String(el.value ?? ''));
+            : Array.from(table.querySelectorAll(selector)).map(el => String(el.value ?? el.textContent ?? ''));
         let max = fallback;
         for (const value of values) {
             for (const part of value.replace(/\r/g, '').split('\n')) {
                 measure.textContent = part || ' ';
-                max = Math.max(max, Math.ceil(measure.getBoundingClientRect().width) + 34);
+                max = Math.max(max, Math.ceil(measure.getBoundingClientRect().width) + 42);
             }
         }
-        return Math.max(fallback, Math.min(max, 700));
+        // Tidak ada batas maksimum: kolom boleh melebar agar teks tidak terpotong.
+        return Math.max(fallback, max);
     };
 
-    // Keep the table practical; wrapping is enabled, so values remain fully visible.
-    const fromWidth = getWidth('from', 520);
-    const toWidth = getWidth('to', 520);
+    const completeWidth = getWidth('complete_no', 220, 'tbody td:nth-child(8) input');
+    const fromWidth = getWidth('from', 180, 'tbody td:nth-child(10) textarea');
+    const toWidth = getWidth('to', 180, 'tbody td:nth-child(11) textarea');
+    const serviceWidth = getWidth('service', 180, 'tbody td:nth-child(12) input');
     measure.remove();
 
     const apply = (col, selector, width) => {
@@ -1435,22 +1440,31 @@ function autoFitLineListColumns() {
             cell.style.setProperty('min-width', `${width}px`, 'important');
             cell.style.setProperty('max-width', 'none', 'important');
             cell.style.setProperty('overflow', 'visible', 'important');
+            cell.style.setProperty('text-align', 'center', 'important');
             const textarea = cell.querySelector('textarea');
-            if (textarea) {
-                textarea.style.setProperty('width', '100%', 'important');
-                textarea.style.setProperty('min-width', '0', 'important');
-                textarea.style.setProperty('max-width', 'none', 'important');
-                textarea.style.setProperty('white-space', 'pre-wrap', 'important');
-                textarea.style.setProperty('overflow-wrap', 'anywhere', 'important');
-                textarea.style.setProperty('word-break', 'break-word', 'important');
-                textarea.style.setProperty('overflow', 'hidden', 'important');
-                if (typeof window.__lineListAutoGrowTextarea === 'function') window.__lineListAutoGrowTextarea(textarea);
+            const input = cell.querySelector('input');
+            const editor = textarea || input;
+            if (editor) {
+                editor.style.setProperty('width', '100%', 'important');
+                editor.style.setProperty('min-width', '0', 'important');
+                editor.style.setProperty('max-width', 'none', 'important');
+                editor.style.setProperty('text-align', 'center', 'important');
+                if (textarea) {
+                    textarea.style.setProperty('white-space', 'nowrap', 'important');
+                    textarea.style.setProperty('overflow-wrap', 'normal', 'important');
+                    textarea.style.setProperty('word-break', 'normal', 'important');
+                    textarea.style.setProperty('overflow-x', 'hidden', 'important');
+                    textarea.style.setProperty('overflow-y', 'hidden', 'important');
+                    textarea.style.setProperty('height', '30px', 'important');
+                }
             }
         });
     };
 
+    apply(completeCol, 'tbody td:nth-child(8)', completeWidth);
     apply(fromCol, 'tbody td:nth-child(10)', fromWidth);
     apply(toCol, 'tbody td:nth-child(11)', toWidth);
+    apply(serviceCol, 'tbody td:nth-child(12)', serviceWidth);
 }
 
 
