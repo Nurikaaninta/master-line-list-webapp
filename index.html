@@ -492,7 +492,10 @@
                             <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
                                 <i class="fa-solid fa-file-pdf text-rose-600"></i> Daftar Dokumen & P&ID Engineering
                             </h4>
-                            <button onclick="showModal('Upload Dokumen', 'Fitur unggah dokumen teknik baru.', 'info')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold">Upload File</button>
+                            <button type="button" onclick="openDocumentUpload()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-2">
+                                <i class="fa-solid fa-cloud-arrow-up"></i> Upload File
+                            </button>
+                            <input type="file" id="documentUploadInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.doc,.docx" class="hidden">
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-xs text-left border-collapse">
@@ -505,24 +508,25 @@
                                         <th class="p-3 text-center">Aksi</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y">
+                                <tbody id="documentsTableBody" class="divide-y">
                                     <tr>
                                         <td class="p-3 font-mono font-bold">B2401-190-A1501</td>
                                         <td class="p-3">CPO Storage & Transfer Facility P&ID</td>
                                         <td class="p-3">Rev 0 (AFC)</td>
                                         <td class="p-3"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">Approved</span></td>
-                                        <td class="p-3 text-center"><button onclick="showModal('Pratinjau', 'Menampilkan pratinjau dokumen PDF.', 'info')" class="px-2 py-1 bg-slate-100 rounded text-slate-700"><i class="fa-solid fa-eye"></i> View</button></td>
+                                        <td class="p-3 text-center"><button onclick="showModal('Pratinjau', 'Dokumen contoh belum memiliki file lokal. Silakan upload file P&ID untuk dapat dibuka.', 'info')" class="px-2 py-1 bg-slate-100 rounded text-slate-700"><i class="fa-solid fa-eye"></i> View</button></td>
                                     </tr>
                                     <tr>
                                         <td class="p-3 font-mono font-bold">B2401-190-A1502</td>
                                         <td class="p-3">Tank Farm Utility Distribution P&ID</td>
                                         <td class="p-3">Rev B (IFI)</td>
                                         <td class="p-3"><span class="px-2 py-0.5 bg-amber-100 text-amber-800 font-bold rounded">Pending Review</span></td>
-                                        <td class="p-3 text-center"><button onclick="showModal('Pratinjau', 'Menampilkan pratinjau dokumen PDF.', 'info')" class="px-2 py-1 bg-slate-100 rounded text-slate-700"><i class="fa-solid fa-eye"></i> View</button></td>
+                                        <td class="p-3 text-center"><button onclick="showModal('Pratinjau', 'Dokumen contoh belum memiliki file lokal. Silakan upload file P&ID untuk dapat dibuka.', 'info')" class="px-2 py-1 bg-slate-100 rounded text-slate-700"><i class="fa-solid fa-eye"></i> View</button></td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
+                        <p class="text-[10px] text-slate-500 pt-1">Upload PDF P&amp;ID atau dokumen engineering lainnya. File yang diunggah tersimpan di browser ini dan dapat dibuka kembali melalui tombol View.</p>
                     </div>
                 </div>
 

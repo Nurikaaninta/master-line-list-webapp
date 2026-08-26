@@ -15,11 +15,61 @@ let accountsList = [
 
 let currentUser = null;
 
+// Status/revisi dokumen mengikuti matriks revision pada prosedur engineering.
+// Disimpan per-project agar pilihan tetap ada setelah refresh browser.
+const REVISION_OPTIONS = [
+    { code: 'IDC', label: 'Inter Discipline Check', format: 'A.0; A.1; A.2; A.3; ...; A.n', defaultNumber: 'A.0', status: 'Inter Discipline Check' },
+    { code: 'IFR', label: 'Issued for Review', format: 'A; B; C; ...; continue', defaultNumber: 'A', status: 'Issued for Review' },
+    { code: 'IFA', label: 'Issued for Approval', format: 'B; C; D; ...; continue', defaultNumber: 'B', status: 'Issued for Approval' },
+    { code: 'IFC', label: 'Issued for Construction', format: '0; 1; 2; ...; n', defaultNumber: '0', status: 'Issued for Construction' },
+    { code: 'ASB', label: 'As-Built', format: '1; 2; 3; ...; n', defaultNumber: '1', status: 'As-Built' },
+    { code: 'IFI', label: 'Issued for Information', format: '0, 1, 2, 3, ...; n', defaultNumber: '0', status: 'Issued for Information' }
+];
+const REVISION_STORAGE_KEY = 'masterLineListRevisionState_v1';
+
+function loadRevisionState() {
+    try { return JSON.parse(localStorage.getItem(REVISION_STORAGE_KEY) || '{}'); }
+    catch (e) { return {}; }
+}
+
+function saveRevisionState() {
+    try {
+        const state = {};
+        projectsData.forEach(p => {
+            state[p.id] = {
+                revisionStatus: p.revisionStatus || 'IFR',
+                revisionNumber: p.revisionNumber || getRevisionOption(p.revisionStatus || 'IFR').defaultNumber,
+                documentStatus: getRevisionOption(p.revisionStatus || 'IFR').label
+            };
+        });
+        localStorage.setItem(REVISION_STORAGE_KEY, JSON.stringify(state));
+    } catch (e) { console.warn('Revision state tidak dapat disimpan:', e); }
+}
+
+function getRevisionOption(code) {
+    return REVISION_OPTIONS.find(o => o.code === code) || REVISION_OPTIONS[1];
+}
+
+function hydrateRevisionState() {
+    const saved = loadRevisionState();
+    projectsData.forEach((p, index) => {
+        // Proyek pertama sudah seluruh line approved, sehingga contoh AFC tetap tampil.
+        const fallbackCode = index === 0 && p.lines.every(l => l.processApproval === 'Approved') ? 'IFC' : 'IFR';
+        const state = saved[p.id] || {};
+        p.revisionStatus = state.revisionStatus || p.revisionStatus || fallbackCode;
+        p.revisionNumber = state.revisionNumber || p.revisionNumber || getRevisionOption(p.revisionStatus).defaultNumber;
+        p.documentStatus = getRevisionOption(p.revisionStatus).label;
+    });
+}
+
 let projectsData = [
     {
         id: "proj-1",
         name: "CPO STORAGE & TRANSFER FACILITY (DATA 1)",
         docNumber: "B2401-190-A1501",
+        revisionStatus: "IFC",
+        revisionNumber: "0",
+        documentStatus: "Issued for Construction",
         leftLogo: "",
         rightLogo: "",
         lines: [
@@ -39,6 +89,9 @@ let projectsData = [
         id: "proj-2",
         name: "STEAM & CONDENSATE SYSTEM (DATA 2)",
         docNumber: "B2401-190-A1501",
+        revisionStatus: "IFR",
+        revisionNumber: "A",
+        documentStatus: "Issued for Review",
         leftLogo: "",
         rightLogo: "",
         lines: [
@@ -81,6 +134,9 @@ let tableFilters = {};
 
 // Sinkronkan Complete Line No. lama dengan format otomatis saat aplikasi pertama kali dibuka.
 // Tidak mengubah data sumber selain membentuk field Complete Line No. dari kolom sumbernya.
+hydrateRevisionState();
+saveRevisionState();
+
 projectsData.forEach(project => {
     project.lines.forEach((line, index) => {
         line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
@@ -91,6 +147,7 @@ projectsData.forEach(project => {
         }
         line.seq = String(line.seq ?? '').replace(/\D/g, '');
         line.spec = String(line.spec ?? '').trim().toUpperCase();
+        line.service = String(line.service ?? '').trim().toUpperCase();
         line.complete_no = buildCompleteLineNo(line, project.lines, index);
     });
 });
@@ -310,14 +367,121 @@ function uploadLogo(event, position) {
     reader.readAsDataURL(file);
 }
 
+function getRevisionValues(code) {
+    // Revision number mengikuti Revision Number Format pada prosedur:
+    // IDC: A.0; A.1; A.2; ...; A.n
+    // IFR: A; B; C; ...; continue
+    // IFA: B; C; D; ...; continue
+    // IFC: 0; 1; 2; ...; n
+    // ASB: 1; 2; 3; ...; n
+    // IFI: 0, 1, 2, 3, ...; n
+    const letters = (start) => Array.from({length: 26}, (_, i) => String.fromCharCode(start.charCodeAt(0) + i));
+    if (code === 'IDC') return Array.from({length: 21}, (_, i) => `A.${i}`);
+    if (code === 'IFR') return letters('A');
+    if (code === 'IFA') return letters('B');
+    if (code === 'IFC') return Array.from({length: 21}, (_, i) => String(i));
+    if (code === 'ASB') return Array.from({length: 20}, (_, i) => String(i + 1));
+    if (code === 'IFI') return Array.from({length: 21}, (_, i) => String(i));
+    return ['0'];
+}
+
 function renderRevisionHeader(proj) {
     const container = document.getElementById('headerRevStatusContainer');
+    if (!container) return;
+
+    const option = getRevisionOption(proj.revisionStatus || 'IFR');
+    const approvedCount = proj.lines.filter(l => l.processApproval === 'Approved').length;
+    const totalCount = proj.lines.length;
+    const isFinalAfc = proj.revisionStatus === 'IFC' && approvedCount === totalCount && totalCount > 0;
+    // Header revision/status dibuat interaktif agar dapat diuji dari semua role.
+    // Hak approval final tetap dikontrol oleh workflow AFC di fungsi approval.
+    const canChangeRevision = true;
+    const currentRevision = proj.revisionNumber || option.defaultNumber;
+    const revisionValues = getRevisionValues(option.code);
+
+    // Tabel acuan mentor dipisahkan menjadi:
+    // REVISI = nilai revision number (A.0/A/B/C/0/1/2/dst.)
+    // STATUS = Description (Inter Discipline Check, Issued for Review, dst.)
+    const revisionOptions = revisionValues.map(value => `
+        <option value="${escapeHtml(value)}" ${String(value) === String(currentRevision) ? 'selected' : ''}>${escapeHtml(value)}</option>
+    `).join('');
+
+    // STATUS mengikuti format tabel mentor: CODE - Description
+    // Contoh: IFC - Issued for Construction
+    const statusOptions = REVISION_OPTIONS.map(item => `
+        <option value="${item.code}" ${item.code === option.code ? 'selected' : ''}>${escapeHtml(item.code + ' - ' + item.label)}</option>
+    `).join('');
+
+    const revisionBadgeCode = option.code === 'IFC' ? 'AFC' : option.code;
+    const revisionBadge = `REV ${escapeHtml(currentRevision)} (${revisionBadgeCode})`;
+
     container.innerHTML = `
-        <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1 rounded-lg">
-            <span class="text-[10px] text-slate-500 uppercase font-semibold">REV 0 (AFC):</span>
-            <span class="font-mono text-emerald-700 font-bold">${proj.lines.filter(l => l.processApproval === 'Approved').length} Lines Approved</span>
+        <div class="revision-header-grid">
+            <div class="revision-field revision-field-left">
+                <span class="revision-field-label">REVISI :</span>
+                <select id="headerRevisionSelect"
+                    ${canChangeRevision ? '' : 'disabled'}
+                    onchange="changeRevisionNumber(this.value)"
+                    class="revision-status-select revision-number-select">
+                    ${revisionOptions}
+                </select>
+            </div>
+
+            <div class="revision-field revision-field-right">
+                <span class="revision-field-label">STATUS :</span>
+                <select id="headerDocumentStatusSelect"
+                    ${canChangeRevision ? '' : 'disabled'}
+                    onchange="changeRevisionStatus(this.value)"
+                    class="revision-document-status-select">
+                    ${statusOptions}
+                </select>
+            </div>
+        </div>
+
+        <div class="revision-approval-badge">
+            <span class="revision-badge-title">${revisionBadge}:</span>
+            <span class="revision-badge-value">${approvedCount} Lines Approved</span>
         </div>
     `;
+}
+
+function changeRevisionNumber(value) {
+    const proj = projectsData[currentProjectIndex];
+    if (!proj) return;
+    // Revision dapat dipilih oleh user yang sedang mengelola dokumen.
+    // Nilai tetap dibatasi hanya pada format revision yang sesuai dengan STATUS.
+    const allowed = getRevisionValues(proj.revisionStatus || 'IFR');
+    if (!allowed.includes(String(value))) {
+        renderRevisionHeader(proj);
+        return;
+    }
+    proj.revisionNumber = String(value);
+    saveRevisionState();
+    renderDashboard();
+}
+
+function changeRevisionStatus(code) {
+    const proj = projectsData[currentProjectIndex];
+    const option = getRevisionOption(code);
+    if (!proj) return;
+
+    // STATUS menentukan format/nilai awal REVISI secara otomatis.
+    // Tidak dibatasi role di header agar dropdown benar-benar dapat digunakan
+    // saat testing workflow oleh Engineer/role lain.
+    proj.revisionStatus = option.code;
+    proj.revisionNumber = option.defaultNumber;
+    proj.documentStatus = option.label;
+
+    // IFC/AFC hanya dapat dipilih setelah seluruh line Approved.
+    if (code === 'IFC' && !(proj.lines.length > 0 && proj.lines.every(l => l.processApproval === 'Approved'))) {
+        proj.revisionStatus = 'IFA';
+        proj.revisionNumber = getRevisionOption('IFA').defaultNumber;
+        proj.documentStatus = getRevisionOption('IFA').label;
+        showModal('Belum Bisa AFC', 'Semua line harus Approved terlebih dahulu sebelum dokumen dapat berstatus IFC / AFC.', 'warning');
+    }
+
+    saveRevisionState();
+    renderDashboard();
 }
 
 
@@ -470,7 +634,7 @@ function renderTableRows(proj) {
                 <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'to', this.value)" ${!canEdit ? 'disabled' : ''}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.to)}">${escapeHtml(line.to)}</textarea>
             </td>
-            <td><input type="text" value="${line.service}" onchange="updateLineField(${index}, 'service', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
+            <td><input type="text" value="${escapeHtmlAttr(String(line.service ?? '').toUpperCase())}" oninput="this.value=this.value.toUpperCase(); updateLineField(${index}, 'service', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
             <td><input type="text" value="${line.phase}" onchange="updateLineField(${index}, 'phase', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.mass}" onchange="updateLineField(${index}, 'mass', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             <td><input type="text" value="${line.vol}" onchange="updateLineField(${index}, 'vol', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
@@ -532,6 +696,10 @@ function updateLineField(index, field, val) {
     }
 
     if (field === 'ins_type') {
+        val = String(val ?? '').toUpperCase();
+    }
+
+    if (field === 'service') {
         val = String(val ?? '').toUpperCase();
     }
 
@@ -679,11 +847,32 @@ function deleteLineRow(index) {
 function toggleProcessApproval(index) {
     const line = projectsData[currentProjectIndex].lines[index];
     line.processApproval = line.processApproval === 'Approved' ? 'Pending' : 'Approved';
+    const proj = projectsData[currentProjectIndex];
+    // Jika sebelumnya AFC lalu ada line yang dibatalkan, kembali ke status review.
+    if (!proj.lines.every(l => l.processApproval === 'Approved')) {
+        if (proj.revisionStatus === 'IFC') {
+            proj.revisionStatus = 'IFR';
+            proj.revisionNumber = 'A';
+            proj.documentStatus = getRevisionOption('IFR').label;
+        }
+    }
+    saveRevisionState();
     renderDashboard();
 }
 
 function managerFinalApproval() {
-    showModal("Sukses AFC!", "Semua line list telah disetujui Project Manager. Dokumen berstatus Approved For Construction (AFC).", "success");
+    const proj = projectsData[currentProjectIndex];
+    if (!proj || !proj.lines.length || !proj.lines.every(l => l.processApproval === 'Approved')) {
+        showModal("Belum Bisa AFC", "Semua line list harus Approved terlebih dahulu.", "warning");
+        return;
+    }
+
+    proj.revisionStatus = 'IFC';
+    proj.revisionNumber = '0';
+    proj.documentStatus = getRevisionOption('IFC').label;
+    saveRevisionState();
+    renderDashboard();
+    showModal("Sukses AFC!", `Semua ${proj.lines.length} line list telah disetujui Project Manager. Dokumen berstatus Approved For Construction (AFC).`, "success");
 }
 
 function filterByColumn(colKey, val) {
@@ -821,6 +1010,7 @@ function handleExcelImport(e) {
                     line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
                     line.ins_thick = (line.ins_thick === '-' ? '' : String(line.ins_thick ?? '').replace(/[^0-9.]/g, ''));
                     line.seq = String(line.seq ?? '').replace(/\D/g, '');
+                    line.service = String(line.service ?? '').trim().toUpperCase();
                     line.complete_no = '';
                 });
                 importedLines.forEach((line, index) => {
@@ -882,7 +1072,7 @@ async function generatePDF() {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(`PROJECT: ${proj.name}`, pageWidth / 2, 15, { align: 'center' });
-    doc.text(`DOCUMENT NUMBER: ${proj.docNumber}   |   REVISION: IFR (A)   |   STATUS: DRAFT / IN PROGRESS`, pageWidth / 2, 20, { align: 'center' });
+    doc.text(`DOCUMENT NUMBER: ${proj.docNumber}   |   REVISION: ${proj.revisionStatus || 'IFR'} (${proj.revisionNumber || getRevisionOption(proj.revisionStatus || 'IFR').defaultNumber})   |   STATUS: ${proj.documentStatus || getRevisionOption(proj.revisionStatus || 'IFR').status}`, pageWidth / 2, 20, { align: 'center' });
 
     const headers = [
         'No','Line Size\\n(Inch)','Process Fluid\\nIdentifier','Pipe.Spec','Seq.\\nNo','Insulation\\nType','Insulation\\nThickness\\n[mm]','Complete Line\\nNo.','P&ID No','From','To','Fluid\\nService','Phase','Mass\\nFlow\\n[kg/h]','Volume\\nFlow\\n[m3/h]','Pressure [Barg]\\nOperating','Pressure [Barg]\\nDesign','Temperature [°C]\\nOperating','Temperature [°C]\\nDesign','Density\\n[kg/m³]','Viscosity\\n[cP]','NDE RT','NDE PT','Pressure\\nTest','Test\\nPressure','Painting\\nCode','PWHT','Stress\\nCriticality','Stress Analysis\\nCalculation Number','Remarks','Process\\nApproval'
@@ -964,6 +1154,214 @@ async function generatePDF() {
 
     doc.save(`${proj.name.replace(/\s+/g, '_')}_Master_Line_List.pdf`);
     showDownloadToast('PDF berhasil diunduh.');
+}
+
+
+/* ================================================================
+   P&ID / DOCUMENT UPLOAD
+   - Uses IndexedDB so PDF/images do not need to be converted to
+     localStorage and remain available after refreshing the page.
+   ================================================================ */
+const DOCUMENT_DB_NAME = 'masterLineListDocumentsDB';
+const DOCUMENT_STORE = 'documents';
+let documentDBPromise = null;
+
+function openDocumentDB() {
+    if (documentDBPromise) return documentDBPromise;
+    documentDBPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(DOCUMENT_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(DOCUMENT_STORE)) {
+                const store = db.createObjectStore(DOCUMENT_STORE, { keyPath: 'id' });
+                store.createIndex('uploadedAt', 'uploadedAt');
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+    return documentDBPromise;
+}
+
+async function getUploadedDocuments() {
+    const db = await openDocumentDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DOCUMENT_STORE, 'readonly');
+        const req = tx.objectStore(DOCUMENT_STORE).getAll();
+        req.onsuccess = () => resolve((req.result || []).sort((a,b) => b.uploadedAt - a.uploadedAt));
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function saveUploadedDocument(record) {
+    const db = await openDocumentDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DOCUMENT_STORE, 'readwrite');
+        tx.objectStore(DOCUMENT_STORE).put(record);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function deleteUploadedDocument(id) {
+    const db = await openDocumentDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DOCUMENT_STORE, 'readwrite');
+        tx.objectStore(DOCUMENT_STORE).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function getUploadedDocument(id) {
+    const db = await openDocumentDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DOCUMENT_STORE, 'readonly');
+        const req = tx.objectStore(DOCUMENT_STORE).get(id);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function formatDocumentSize(bytes) {
+    if (!Number.isFinite(bytes)) return '-';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDocumentDate(timestamp) {
+    return new Date(timestamp).toLocaleString('id-ID', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function documentTypeLabel(type) {
+    if (type === 'application/pdf') return 'PDF';
+    if (type.startsWith('image/')) return 'IMAGE';
+    if (type.includes('sheet') || type.includes('excel')) return 'EXCEL';
+    if (type.includes('word')) return 'WORD';
+    return 'FILE';
+}
+
+function escapeHtmlDocument(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, ch => ({
+        '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'
+    }[ch]));
+}
+
+async function renderUploadedDocuments() {
+    const tbody = document.getElementById('documentsTableBody');
+    if (!tbody) return;
+    try {
+        const docs = await getUploadedDocuments();
+        // Remove only rows created by this upload feature. Static project rows remain.
+        tbody.querySelectorAll('tr[data-uploaded-document="true"]').forEach(row => row.remove());
+        docs.forEach(doc => {
+            const tr = document.createElement('tr');
+            tr.dataset.uploadedDocument = 'true';
+            tr.innerHTML = `
+                <td class="p-3 font-mono font-bold">${escapeHtmlDocument(doc.documentNumber)}</td>
+                <td class="p-3">
+                    <div class="font-semibold text-slate-800">${escapeHtmlDocument(doc.name)}</div>
+                    <div class="text-[10px] text-slate-500 mt-0.5">${documentTypeLabel(doc.type)} · ${formatDocumentSize(doc.size)} · ${formatDocumentDate(doc.uploadedAt)}</div>
+                </td>
+                <td class="p-3">${escapeHtmlDocument(doc.revision)}</td>
+                <td class="p-3"><span class="px-2 py-0.5 bg-amber-100 text-amber-800 font-bold rounded">Pending Review</span></td>
+                <td class="p-3 text-center whitespace-nowrap">
+                    <button type="button" onclick="viewUploadedDocument('${doc.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 mr-1"><i class="fa-solid fa-eye"></i> View</button>
+                    <button type="button" onclick="removeUploadedDocument('${doc.id}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded text-rose-700"><i class="fa-solid fa-trash"></i></button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('Gagal memuat dokumen:', error);
+    }
+}
+
+function openDocumentUpload() {
+    const input = document.getElementById('documentUploadInput');
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+}
+
+async function handleDocumentUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const allowed = ['application/pdf','image/png','image/jpeg','image/webp',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel','application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const extAllowed = /\.(pdf|png|jpe?g|webp|xlsx?|docx?)$/i.test(file.name);
+    if (!allowed.includes(file.type) && !extAllowed) {
+        showModal('Format Tidak Didukung', 'Gunakan PDF, gambar, Excel, atau Word untuk dokumen engineering.', 'error');
+        return;
+    }
+
+    // Keep the document metadata together with the actual Blob in IndexedDB.
+    const record = {
+        id: `DOC-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        documentNumber: `UPL-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+        projectId: projectsData[currentProjectIndex]?.id || null,
+        projectName: projectsData[currentProjectIndex]?.name || '',
+        name: file.name,
+        revision: `${projectsData[currentProjectIndex]?.revisionStatus || 'IFR'} (${projectsData[currentProjectIndex]?.revisionNumber || getRevisionOption('IFR').defaultNumber})`,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        uploadedAt: Date.now(),
+        blob: file
+    };
+
+    try {
+        await saveUploadedDocument(record);
+        await renderUploadedDocuments();
+        showModal('Upload Berhasil', `${file.name} berhasil ditambahkan ke daftar P&ID / Documents. Status awal: Pending Review.`, 'success');
+    } catch (error) {
+        console.error(error);
+        showModal('Upload Gagal', 'Browser tidak dapat menyimpan file ini. Coba file yang lebih kecil atau gunakan browser modern.', 'error');
+    }
+}
+
+async function viewUploadedDocument(id) {
+    try {
+        const doc = await getUploadedDocument(id);
+        if (!doc || !doc.blob) throw new Error('Dokumen tidak ditemukan');
+        const url = URL.createObjectURL(doc.blob);
+        const opened = window.open(url, '_blank');
+        if (!opened) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = doc.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+        console.error(error);
+        showModal('Dokumen Tidak Ditemukan', 'File sudah tidak tersedia di penyimpanan browser.', 'error');
+    }
+}
+
+async function removeUploadedDocument(id) {
+    if (!confirm('Hapus dokumen yang di-upload ini dari daftar?')) return;
+    try {
+        await deleteUploadedDocument(id);
+        await renderUploadedDocuments();
+        showModal('Dokumen Dihapus', 'Dokumen berhasil dihapus dari daftar upload.', 'success');
+    } catch (error) {
+        showModal('Gagal Menghapus', 'Dokumen tidak dapat dihapus.', 'error');
+    }
+}
+
+function initDocumentUpload() {
+    const input = document.getElementById('documentUploadInput');
+    if (input) input.addEventListener('change', handleDocumentUpload);
+    renderUploadedDocuments();
 }
 
 function showModal(title, text, type = "info") {
@@ -1488,3 +1886,7 @@ document.addEventListener('click', (event) => {
         viewport.focus({ preventScroll: true });
     }
 });
+
+
+// Initialize P&ID / Documents upload after the page is ready.
+document.addEventListener("DOMContentLoaded", initDocumentUpload);
