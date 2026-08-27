@@ -833,3 +833,62 @@ body {
         flex: 0 1 auto;
     }
 }
+
+/* WORD-LIKE CORPORATE TABLE HEADERS — UI ONLY */
+.excel-table thead th {
+    background: #eaf2fb !important;
+    color: #17365d !important;
+    font-weight: 800 !important;
+    border-right: 1px solid #b8cbe0 !important;
+    border-bottom: 2px solid #80c342 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.75);
+}
+.excel-table thead tr:first-child th {
+    background: #dceaf7 !important;
+    color: #153b63 !important;
+}
+.excel-table thead tr:nth-child(2) th {
+    background: #edf4fb !important;
+    color: #244b70 !important;
+    border-bottom: 2px solid #80c342 !important;
+}
+.excel-table thead th[colspan] {
+    background: #d3e5f4 !important;
+    color: #123b61 !important;
+    font-weight: 800 !important;
+}
+.excel-table thead .freeze-col,
+.excel-table thead .freeze-col-1,
+.excel-table thead .freeze-col-2,
+.excel-table thead .freeze-col-3,
+.excel-table thead .freeze-col-4,
+.excel-table thead .freeze-col-5,
+.excel-table thead .freeze-col-6,
+.excel-table thead .freeze-col-7 {
+    background: #dceaf7 !important;
+    color: #153b63 !important;
+}
+.excel-table thead th .column-filter-icon,
+.excel-table thead th i,
+.excel-table thead th svg {
+    color: #52779b !important;
+}
+.excel-table thead th:hover {
+    background: #d6e8f6 !important;
+}
+.excel-table thead th input,
+.excel-table thead th select {
+    background: #ffffff !important;
+    color: #17365d !important;
+}
+
+/* Header border refinement: neutral gray only — no green line */
+.excel-table thead th {
+    border-bottom: 1px solid #b8cbe0 !important;
+}
+.excel-table thead tr:nth-child(2) th {
+    border-bottom: 1px solid #b8cbe0 !important;
+}
+.excel-table thead th[colspan] {
+    border-bottom-color: #b8cbe0 !important;
+}

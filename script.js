@@ -623,8 +623,8 @@ function renderTableRows(proj) {
     >
 </td>
             <td>
-                <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
-                    class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.pid)}">${escapeHtml(line.pid)}</textarea>
+                <textarea wrap="off" rows="1" oninput="this.value=this.value.toUpperCase(); updateLineField(${index}, 'pid', this.value)" ${!canEdit ? 'disabled' : ''}
+                    class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs uppercase" title="${escapeHtmlAttr(String(line.pid ?? '').toUpperCase())}">${escapeHtml(String(line.pid ?? '').toUpperCase())}</textarea>
             </td>
             <td>
                 <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'from', this.value)" ${!canEdit ? 'disabled' : ''}
@@ -700,6 +700,10 @@ function updateLineField(index, field, val) {
     }
 
     if (field === 'service') {
+        val = String(val ?? '').toUpperCase();
+    }
+
+    if (field === 'pid') {
         val = String(val ?? '').toUpperCase();
     }
 
@@ -1890,3 +1894,5 @@ document.addEventListener('click', (event) => {
 
 // Initialize P&ID / Documents upload after the page is ready.
 document.addEventListener("DOMContentLoaded", initDocumentUpload);
+
+
