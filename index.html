@@ -18,22 +18,23 @@
     <!-- External Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="h-full font-sans text-slate-800 antialiased bg-slate-950 flex items-center justify-center min-h-screen">
+<body class="h-full font-sans text-slate-800 antialiased bg-slate-100 flex items-center justify-center min-h-screen">
 
     <!-- ========================================== -->
     <!-- HALAMAN LOGIN                              -->
     <!-- ========================================== -->
-    <div id="loginPage" class="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-800 overflow-hidden m-4">
-        <div class="bg-emerald-600 p-6 text-center border-b border-slate-800 relative">
-            <div class="flex justify-center items-center space-x-3 mb-2">
-                <div class="bg-white px-3 py-1.5 rounded shadow flex items-center justify-center">
-                    <img src="tripatra-logo.png" alt="Tripatra" onerror="this.onerror=null;this.src='tripatra-logo.png'" class="h-8 w-auto object-contain">
-                </div>
+    <div id="loginPage" class="login-card w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden m-4">
+        <div class="login-brand-panel text-center relative">
+            <div class="login-logo-wrap">
+                <img src="tripatra-login-transparent.png" alt="Tripatra" onerror="this.onerror=null;this.src='tripatra-logo.png'" class="login-logo">
             </div>
-            <h1 class="text-lg font-extrabold text-white tracking-wide">MASTER LINE LIST WEBAPP</h1>
+            <div class="mt-4">
+                <h1 class="text-lg font-extrabold text-slate-900 tracking-wide">MASTER LINE LIST WEBAPP</h1>
+                <p class="text-[10px] text-slate-500 font-semibold tracking-[0.18em] mt-1">ENGINEERING STUDIO</p>
+            </div>
         </div>
 
-        <div class="p-6">
+        <div class="login-form-panel p-7">
             <form id="loginForm" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Email</label>
@@ -448,6 +449,7 @@
 
                         <div class="bg-slate-50 border-t border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
                             <div id="bottomActionArea" class="flex items-center space-x-2">
+                                <span id="designerEditHint" class="hidden text-[10px] text-slate-500 ml-2">Designer: dapat menambah line & mengisi field desain yang ditetapkan.</span>
                                 <button id="addNewRowBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5">
                                     <i class="fa-solid fa-plus"></i>
                                     <span>Add Pipe Line</span>
