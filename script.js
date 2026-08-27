@@ -243,6 +243,20 @@ function setupUserInterfaceByRole() {
 
     // Tombol + biru di header sengaja dihapus.
     // Penambahan akun hanya dilakukan dari halaman Team & Roles milik Admin.
+
+    // Lead Process Engineer hanya boleh mengubah kolom Remarks dan melakukan
+    // approval process. Lead tidak boleh menambah/import/menghapus line.
+    const isLeadProcessOnly = currentUser.role === 'Lead Process Engineer';
+    const addBtn = document.getElementById('addNewRowBtn');
+    const importBtn = document.getElementById('importExcelAction');
+
+    if (addBtn) {
+        addBtn.classList.toggle('hidden', isLeadProcessOnly);
+        addBtn.disabled = isLeadProcessOnly;
+    }
+    if (importBtn) {
+        importBtn.classList.toggle('hidden', isLeadProcessOnly);
+    }
 }
 
 // Fungsi untuk menangani perubahan pada dropdown project header[cite: 10]
@@ -577,7 +591,9 @@ function renderTableRows(proj) {
     const tbody = document.getElementById('lineTableBody');
     tbody.innerHTML = '';
 
-    const canEdit = currentUser && ['Process Engineer', 'Piping Engineer', 'System Administrator', 'Lead Process Engineer', 'Lead Piping Engineer'].includes(currentUser.role);
+    const isLeadProcessOnly = currentUser && currentUser.role === 'Lead Process Engineer';
+    const canEdit = currentUser && ['Process Engineer', 'Piping Engineer', 'System Administrator', 'Lead Piping Engineer'].includes(currentUser.role);
+    const canEditRemarks = !!canEdit || !!isLeadProcessOnly;
     const isProcessLead = currentUser && ['Lead Process Engineer', 'System Administrator'].includes(currentUser.role);
     const isManager = currentUser && ['Project Manager', 'System Administrator'].includes(currentUser.role);
 
@@ -652,7 +668,7 @@ function renderTableRows(proj) {
             <td class="bg-amber-50/30"><input type="text" value="${line.pwht}" onchange="updateLineField(${index}, 'pwht', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs bg-amber-50/50"></td>
             <td class="bg-amber-50/30"><input type="text" value="${line.stress_critical}" onchange="updateLineField(${index}, 'stress_critical', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs bg-amber-50/50"></td>
             <td class="bg-amber-50/30"><input type="text" value="${line.stress_calc_no}" onchange="updateLineField(${index}, 'stress_calc_no', this.value)" ${!canEdit ? 'disabled' : ''} class="w-28 px-1.5 py-1 border rounded text-xs bg-amber-50/50 font-mono"></td>
-            <td><input type="text" value="${line.remarks}" onchange="updateLineField(${index}, 'remarks', this.value)" ${!canEdit ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
+            <td><input type="text" value="${escapeHtmlAttr(line.remarks)}" onchange="updateLineField(${index}, 'remarks', this.value)" ${!canEditRemarks ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs" title="${isLeadProcessOnly ? 'Lead Process Engineer hanya dapat mengubah Remarks' : ''}"></td>
             
             <td class="text-center bg-amber-50/40">
                 <span class="px-2 py-1 rounded text-[10px] font-bold ${line.processApproval === 'Approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
@@ -690,6 +706,12 @@ function renderTableRows(proj) {
 
 function updateLineField(index, field, val) {
     const line = projectsData[currentProjectIndex].lines[index];
+
+    if (currentUser && currentUser.role === 'Lead Process Engineer' && field !== 'remarks') {
+        renderDashboard();
+        showModal("Akses Ditolak", "Lead Process Engineer hanya dapat mengubah kolom Remarks.", "warning");
+        return;
+    }
 
     if (field === 'seq') {
         val = String(val ?? '').replace(/\D/g, '');
@@ -777,6 +799,10 @@ function updateLineField(index, field, val) {
 }
 
 function addLineRow() {
+    if (currentUser && currentUser.role === 'Lead Process Engineer') {
+        showModal("Akses Ditolak", "Lead Process Engineer tidak memiliki akses untuk menambah Pipe Line.", "warning");
+        return;
+    }
     const proj = projectsData[currentProjectIndex];
 
     // Baris baru harus benar-benar kosong agar user mengisi data sendiri.
@@ -843,6 +869,10 @@ function addLineRow() {
 }
 
 function deleteLineRow(index) {
+    if (currentUser && currentUser.role === 'Lead Process Engineer') {
+        showModal("Akses Ditolak", "Lead Process Engineer tidak memiliki akses untuk menghapus Pipe Line.", "warning");
+        return;
+    }
     projectsData[currentProjectIndex].lines.splice(index, 1);
     renderDashboard();
     showModal("Informasi", "Baris pipa telah dihapus.", "info");
