@@ -317,9 +317,9 @@
 
                     <!-- KONTEN UTAMA: SPREADSHEET LINE LIST -->
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
-                        <div class="bg-white border-b border-slate-200 p-6">
-                            <div class="flex flex-col md:flex-row items-center justify-between w-full gap-6">
-                                <div class="flex flex-col justify-center items-center w-48 shrink-0 relative group">
+                        <div class="line-list-header bg-white border-b border-slate-200 px-6 py-5">
+                            <div class="line-list-header-main">
+                                <div class="line-list-header-logo line-list-header-logo-left">
                                     <div id="leftLogoContainer" class="w-full h-16 flex items-center justify-center cursor-pointer relative overflow-hidden">
                                         <span id="leftLogoPlaceholder" class="text-3xl font-black text-blue-600 tracking-tighter leading-none">ARC<span class="text-cyan-400">●</span></span>
                                         <img id="leftLogoImg" class="hidden max-h-14 max-w-full object-contain" alt="Logo Klien">
@@ -330,29 +330,25 @@
                                     </div>
                                 </div>
 
-                                <div class="flex flex-col items-center justify-center flex-1 text-center space-y-2.5 w-full">
-                                    <div class="flex flex-col sm:flex-row items-center justify-center gap-2 text-sm font-bold text-slate-800 w-full">
-                                        <span class="uppercase text-[11px] font-semibold text-slate-500 w-36 text-right shrink-0">NAMA PROJECT:</span>
-                                        <div id="projectNameViewport" class="project-name-viewport" tabindex="0" aria-label="Nama Project">
-                                            <input type="text" id="headerProjectName" readonly value="AGPA REFINERY COMPLEX"
-                                                title="Nama project" class="project-name-value px-3 py-1 font-black text-slate-900 text-sm border-b border-dashed border-slate-300 bg-transparent text-center focus:outline-none transition">
-                                        </div>
+                                <div class="line-list-project-title">
+                                    <div id="projectNameViewport" class="project-name-viewport" tabindex="0" aria-label="Nama Project">
+                                        <input type="text" id="headerProjectName" readonly value="AGPA REFINERY COMPLEX"
+                                            title="Nama project" class="project-name-value" />
                                     </div>
-                                    <div class="flex flex-col sm:flex-row items-center justify-center gap-2 text-sm font-bold text-slate-800 w-full">
-                                        <span class="uppercase text-[11px] font-semibold text-slate-500 w-36 text-right">DOCUMENT NUMBER:</span>
-                                        <input type="text" id="headerDocNumber" disabled value="E2401-100-A1001" 
-                                            class="px-3 py-1 font-mono font-black text-slate-900 text-sm border-b border-dashed border-slate-300 bg-transparent text-center focus:border-blue-600 focus:outline-none w-full sm:w-80 transition">
-                                    </div>
-                                    <div id="headerRevStatusContainer" class="flex flex-wrap items-center justify-center gap-6 text-xs font-bold text-slate-800 w-full mt-1"></div>
+                                    <input type="text" id="headerDocNumber" disabled value="E2401-100-A1001"
+                                        aria-label="Document Number"
+                                        class="document-number-value" />
                                 </div>
 
-                                <div class="flex flex-col justify-center items-center w-48 shrink-0 relative group">
+                                <div class="line-list-header-logo line-list-header-logo-right">
                                     <div id="rightLogoContainer" class="w-full h-16 flex items-center justify-center cursor-pointer relative overflow-hidden">
                                         <div id="rightLogoPlaceholder" class="hidden"></div>
                                         <img id="rightLogoImg" src="tripatra-logo.png" onerror="this.onerror=null;this.src='tripatra-logo.png'" class="max-h-14 max-w-full object-contain" alt="Logo Tripatra">
                                     </div>
                                 </div>
                             </div>
+
+                            <div id="headerRevStatusContainer" class="header-revision-status-row"></div>
                         </div>
 
                         <div class="line-list-scroll flex-1 overflow-auto bg-white relative max-h-[500px]" data-freeze-columns="7" aria-label="Line List table with frozen columns through Insulation Section">

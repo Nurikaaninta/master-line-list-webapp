@@ -331,7 +331,7 @@ function renderDashboard() {
     const proj = projectsData[currentProjectIndex];
     document.getElementById('breadcrumbProject').innerText = proj.name;
     document.getElementById('headerProjectName').value = proj.name;
-    document.getElementById('headerDocNumber').value = proj.docNumber;
+    document.getElementById('headerDocNumber').value = String(proj.docNumber || '').replace(/\s*-\s*/g, ' - ');
     if (typeof initProjectNameMarquee === 'function') initProjectNameMarquee();
 
     // Perbarui fungsi render dropdown project agar menyisipkan opsi Add Project di akhir[cite: 10]
