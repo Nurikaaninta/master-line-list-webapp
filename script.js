@@ -1004,6 +1004,24 @@ function resubmitWorkflowEdit(index, stage) {
     delete workflowEditState[stage][index];
     saveApprovalState();
     renderDashboard();
+
+    // Setelah data diperbaiki dan dikirim ulang, otomatis geser tabel
+    // ke sisi kanan agar status Approval dan kolom Aksi langsung terlihat.
+    // User tidak perlu menggeser horizontal secara manual.
+    requestAnimationFrame(() => {
+        const scroller = document.querySelector('.line-list-scroll');
+        if (!scroller) return;
+
+        // Tunggu render tabel selesai agar scrollWidth sudah sesuai.
+        requestAnimationFrame(() => {
+            const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+            scroller.scrollTo({
+                left: maxScrollLeft,
+                behavior: 'smooth'
+            });
+        });
+    });
+
     showModal('Berhasil Dikirim Ulang', `Line ${index + 1} sudah diperbaiki dan dikirim kembali ke Lead ${stage === 'process' ? 'Process' : 'Piping'} untuk pemeriksaan ulang.`, 'success');
 }
 
@@ -1047,6 +1065,24 @@ function setApprovalStatus(index, status, stage = 'process') {
 
     saveApprovalState();
     renderDashboard();
+
+    // Setelah Lead Process / Lead Piping memberi keputusan, otomatis
+    // geser tabel ke sisi kanan agar status Approval dan kolom Aksi
+    // langsung terlihat tanpa user harus melakukan scroll manual.
+    requestAnimationFrame(() => {
+        const scroller = document.querySelector('.line-list-scroll');
+        if (!scroller) return;
+
+        // Tunggu satu frame lagi supaya lebar tabel sudah selesai dihitung
+        // setelah render ulang, lalu lakukan perpindahan horizontal yang halus.
+        requestAnimationFrame(() => {
+            const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+            scroller.scrollTo({
+                left: maxScrollLeft,
+                behavior: 'smooth'
+            });
+        });
+    });
 
     const stageLabel = stage === 'piping' ? 'Piping Approval' : 'Process Approval';
     showModal('Status Diperbarui', `${stageLabel} line ${index + 1} menjadi ${status}.`, status === 'Approved' ? 'success' : status === 'Rejected' ? 'warning' : 'info');
