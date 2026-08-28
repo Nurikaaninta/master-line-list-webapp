@@ -692,6 +692,36 @@ function renderTableRows(proj) {
             tr.title = `WARNING: Seq. No. ${normalizedSeq} duplikat. Mohon gunakan Seq. No. yang lain.`;
         }
 
+        let actionHtml = '-';
+        if (canApprove) {
+            actionHtml = `
+                <div class="approval-actions" aria-label="Approval actions">
+                    <button type="button" onclick="setApprovalStatus(${index}, 'Approved', '${approvalStage}')" class="approval-btn approval-btn-approve" title="Approve" aria-label="Approve"><i class="fa-solid fa-check"></i></button>
+                    <button type="button" onclick="setApprovalStatus(${index}, 'Rejected', '${approvalStage}')" class="approval-btn approval-btn-reject" title="Reject" aria-label="Reject"><i class="fa-solid fa-xmark"></i></button>
+                    <button type="button" onclick="setApprovalStatus(${index}, 'Deleted', '${approvalStage}')" class="approval-btn approval-btn-delete" title="Delete status" aria-label="Delete status"><i class="fa-solid fa-trash"></i></button>
+                </div>`;
+        } else if (isStageEngineer) {
+            if (rowInEditMode) {
+                actionHtml = `
+                    <div class="approval-actions engineer-revision-actions">
+                        <button type="button" onclick="resubmitWorkflowEdit(${index}, '${approvalStage}')" class="revision-submit-btn" title="Kirim kembali ke Lead"><i class="fa-solid fa-paper-plane"></i> Kirim Ulang</button>
+                        <button type="button" onclick="cancelWorkflowEdit(${index}, '${approvalStage}')" class="revision-cancel-btn" title="Batalkan edit"><i class="fa-solid fa-rotate-left"></i></button>
+                    </div>`;
+            } else if (currentStatus === 'Approved') {
+                actionHtml = `
+                    <div class="approval-actions engineer-revision-actions">
+                        <button type="button" onclick="requestWorkflowRevision(${index}, '${approvalStage}')" class="revision-need-btn" title="Need Revision" aria-label="Need Revision"><i class="fa-solid fa-arrow-left"></i></button>
+                    </div>`;
+            } else if (currentStatus === 'Rejected') {
+                actionHtml = `
+                    <div class="approval-actions engineer-revision-actions">
+                        <button type="button" onclick="startWorkflowEdit(${index}, '${approvalStage}')" class="revision-edit-btn" title="Edit data untuk revisi"><i class="fa-solid fa-pen-to-square"></i> Edit Data</button>
+                    </div>`;
+            } else {
+                actionHtml = `<button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris"><i class="fa-solid fa-trash"></i></button>`;
+            }
+        }
+
         tr.innerHTML = `
             <td class="freeze-col freeze-col-1 text-center font-bold text-slate-500">${index + 1}</td>
             <td class="freeze-col freeze-col-2">${renderLineSizeSelect(line, index, canEditRow)}</td>
@@ -753,24 +783,7 @@ function renderTableRows(proj) {
             </td>
 
             <td class="text-center approval-action-cell">
-                ${canApprove ? `
-                    <div class="approval-actions" aria-label="Approval actions">
-                        <button type="button" onclick="setApprovalStatus(${index}, 'Approved', '${approvalStage}')" class="approval-btn approval-btn-approve" title="Approve" aria-label="Approve"><i class="fa-solid fa-check"></i></button>
-                        <button type="button" onclick="setApprovalStatus(${index}, 'Rejected', '${approvalStage}')" class="approval-btn approval-btn-reject" title="Reject" aria-label="Reject"><i class="fa-solid fa-xmark"></i></button>
-                        <button type="button" onclick="setApprovalStatus(${index}, 'Deleted', '${approvalStage}')" class="approval-btn approval-btn-delete" title="Delete status" aria-label="Delete status"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                ` : (isStageEngineer ? `
-                    ${rowInEditMode ? `
-                        <div class="approval-actions engineer-revision-actions">
-                            <button type="button" onclick="resubmitWorkflowEdit(${index}, '${approvalStage}')" class="revision-submit-btn" title="Kirim kembali ke Lead"><i class="fa-solid fa-paper-plane"></i> Kirim Ulang</button>
-                            <button type="button" onclick="cancelWorkflowEdit(${index}, '${approvalStage}')" class="revision-cancel-btn" title="Batalkan edit"><i class="fa-solid fa-rotate-left"></i></button>
-                        </div>
-                    ` : ((approvalStage === 'process' && currentStatus === 'Rejected') || (approvalStage === 'piping' && ['Approved','Rejected'].includes(currentStatus)) ? `
-                        <div class="approval-actions engineer-revision-actions">
-                            <button type="button" onclick="startWorkflowEdit(${index}, '${approvalStage}')" class="revision-edit-btn" title="Edit data untuk revisi"><i class="fa-solid fa-pen-to-square"></i> Edit Data</button>
-                        </div>
-                    ` : `<button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris"><i class="fa-solid fa-trash"></i></button>`)}
-                ` : '-')}
+                ${actionHtml}
             </td>
         `;
         tbody.appendChild(tr);
@@ -963,17 +976,74 @@ function addLineRow() {
     showModal("Berhasil", "Baris pipa kosong berhasil ditambahkan dan tabel otomatis menuju baris terakhir.", "success");
 }
 
+function requestWorkflowRevision(index, stage) {
+    const expectedRole = stage === 'process' ? 'Process Engineer' : 'Piping Engineer';
+    if (currentUser?.role !== expectedRole && currentUser?.role !== 'System Administrator') {
+        showModal('Akses Ditolak', `Hanya ${expectedRole} yang dapat meminta revisi pada tahap ini.`, 'warning');
+        return;
+    }
+
+    // Tombol panah/back pada line yang sudah Approved berarti NEED REVISION.
+    // Data tidak dihapus dan status Approved tidak langsung diubah; Engineer
+    // masuk ke mode edit terlebih dahulu. Status baru menjadi Pending saat
+    // tombol "Kirim Ulang" ditekan setelah perbaikan selesai.
+    workflowEditState[stage][index] = true;
+    renderDashboard();
+
+    requestAnimationFrame(() => {
+        const scroller = document.querySelector('.line-list-scroll');
+        const row = document.querySelector(`#lineTableBody tr[data-line-index=\"${index}\"]`);
+        if (!scroller) return;
+        scroller.scrollLeft = 0;
+        if (row) {
+            const scrollerRect = scroller.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            if (rowRect.top < scrollerRect.top) scroller.scrollTop -= (scrollerRect.top - rowRect.top);
+            else if (rowRect.bottom > scrollerRect.bottom) scroller.scrollTop += (rowRect.bottom - scrollerRect.bottom);
+        }
+        requestAnimationFrame(() => { if (scroller) scroller.scrollLeft = 0; });
+    });
+
+    showModal('Need Revision', `Line ${index + 1} berstatus Approved dan dibuka kembali untuk revisi. Setelah diperbaiki, klik \"Kirim Ulang\" untuk mengirim kembali ke Lead ${stage === 'process' ? 'Process' : 'Piping'}.`, 'info');
+}
+
 function startWorkflowEdit(index, stage) {
     const expectedRole = stage === 'process' ? 'Process Engineer' : 'Piping Engineer';
     if (currentUser?.role !== expectedRole && currentUser?.role !== 'System Administrator') {
         showModal('Akses Ditolak', `Hanya ${expectedRole} yang dapat memperbaiki data pada tahap ini.`, 'warning');
         return;
     }
+
     workflowEditState[stage][index] = true;
     renderDashboard();
+
+    // Saat Edit Data dibuka dari kolom kanan (Process/Piping Approval),
+    // tabel otomatis kembali ke sisi kiri agar kolom input pertama langsung terlihat.
+    // Berlaku sama untuk Process Engineer dan Piping Engineer.
     requestAnimationFrame(() => {
+        const scroller = document.querySelector('.line-list-scroll');
         const row = document.querySelector(`#lineTableBody tr[data-line-index="${index}"]`);
-        row?.scrollIntoView({ block: 'nearest' });
+
+        if (scroller) {
+            // Hanya ubah posisi horizontal; posisi vertikal tetap mengikuti baris yang diedit.
+            scroller.scrollLeft = 0;
+        }
+
+        if (scroller && row) {
+            const scrollerRect = scroller.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+
+            if (rowRect.top < scrollerRect.top) {
+                scroller.scrollTop -= (scrollerRect.top - rowRect.top);
+            } else if (rowRect.bottom > scrollerRect.bottom) {
+                scroller.scrollTop += (rowRect.bottom - scrollerRect.bottom);
+            }
+        }
+
+        // Pastikan tetap di paling kiri setelah browser menyelesaikan layout.
+        requestAnimationFrame(() => {
+            if (scroller) scroller.scrollLeft = 0;
+        });
     });
 }
 

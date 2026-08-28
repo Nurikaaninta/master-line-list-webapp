@@ -1000,6 +1000,9 @@ body {
     border-color: #fecdd3;
 }
 
+.revision-need-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #cbd5e1;border-radius:7px;background:#f1f5f9;color:#475569;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s ease}
+.revision-need-btn:hover{background:#e2e8f0;color:#0f172a;transform:translateX(-1px)}
+
 /* Workflow Reject -> Edit -> Resubmit */
 .revision-edit-btn,.revision-submit-btn,.revision-cancel-btn{display:inline-flex;align-items:center;gap:5px;border:0;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
 .revision-edit-btn{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
