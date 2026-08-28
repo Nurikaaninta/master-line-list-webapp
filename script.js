@@ -976,6 +976,36 @@ function addLineRow() {
     showModal("Berhasil", "Baris pipa kosong berhasil ditambahkan dan tabel otomatis menuju baris terakhir.", "success");
 }
 
+function scrollLineListToRightAnimated(keepAtRight = true) {
+    const scroller = document.querySelector('.line-list-scroll');
+    if (!scroller) return;
+
+    const move = () => {
+        const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        if (maxScroll <= 0) return;
+        // Gunakan native smooth scroll supaya perpindahan ke kolom kanan
+        // benar-benar terlihat bergerak, bukan sekadar lompat posisi.
+        scroller.scrollTo({ left: maxScroll, behavior: 'smooth' });
+    };
+
+    requestAnimationFrame(() => {
+        move();
+        // Render/autofit tabel dapat mengubah scrollWidth. Pastikan target
+        // kanan dihitung ulang setelah layout stabil.
+        requestAnimationFrame(() => {
+            move();
+            if (keepAtRight) {
+                setTimeout(() => {
+                    const current = document.querySelector('.line-list-scroll');
+                    if (!current) return;
+                    const maxScroll = Math.max(0, current.scrollWidth - current.clientWidth);
+                    current.scrollTo({ left: maxScroll, behavior: 'smooth' });
+                }, 180);
+            }
+        });
+    });
+}
+
 function requestWorkflowRevision(index, stage) {
     const expectedRole = stage === 'process' ? 'Process Engineer' : 'Piping Engineer';
     if (currentUser?.role !== expectedRole && currentUser?.role !== 'System Administrator') {
@@ -994,14 +1024,13 @@ function requestWorkflowRevision(index, stage) {
         const scroller = document.querySelector('.line-list-scroll');
         const row = document.querySelector(`#lineTableBody tr[data-line-index=\"${index}\"]`);
         if (!scroller) return;
-        scroller.scrollLeft = 0;
         if (row) {
             const scrollerRect = scroller.getBoundingClientRect();
             const rowRect = row.getBoundingClientRect();
             if (rowRect.top < scrollerRect.top) scroller.scrollTop -= (scrollerRect.top - rowRect.top);
             else if (rowRect.bottom > scrollerRect.bottom) scroller.scrollTop += (rowRect.bottom - scrollerRect.bottom);
         }
-        requestAnimationFrame(() => { if (scroller) scroller.scrollLeft = 0; });
+        scrollLineListToRightAnimated(true);
     });
 
     showModal('Need Revision', `Line ${index + 1} berstatus Approved dan dibuka kembali untuk revisi. Setelah diperbaiki, klik \"Kirim Ulang\" untuk mengirim kembali ke Lead ${stage === 'process' ? 'Process' : 'Piping'}.`, 'info');
@@ -1075,22 +1104,10 @@ function resubmitWorkflowEdit(index, stage) {
     saveApprovalState();
     renderDashboard();
 
-    // Setelah data diperbaiki dan dikirim ulang, otomatis geser tabel
-    // ke sisi kanan agar status Approval dan kolom Aksi langsung terlihat.
-    // User tidak perlu menggeser horizontal secara manual.
-    requestAnimationFrame(() => {
-        const scroller = document.querySelector('.line-list-scroll');
-        if (!scroller) return;
-
-        // Tunggu render tabel selesai agar scrollWidth sudah sesuai.
-        requestAnimationFrame(() => {
-            const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-            scroller.scrollTo({
-                left: maxScrollLeft,
-                behavior: 'smooth'
-            });
-        });
-    });
+    // Setelah data diperbaiki dan dikirim ulang, tabel harus bergerak otomatis
+    // ke ujung kanan. Gunakan helper yang sama dengan Need Revision supaya
+    // perilakunya benar-benar konsisten dan tidak perlu scroll manual.
+    scrollLineListToRightAnimated(true);
 
     showModal('Berhasil Dikirim Ulang', `Line ${index + 1} sudah diperbaiki dan dikirim kembali ke Lead ${stage === 'process' ? 'Process' : 'Piping'} untuk pemeriksaan ulang.`, 'success');
 }
