@@ -39,15 +39,40 @@ function loadApprovalState() {
     catch (e) { return {}; }
 }
 
+function getLineApprovalBucket(line, cycle) {
+    if (!line) return null;
+    if (!line.approvalsByCycle || typeof line.approvalsByCycle !== 'object') line.approvalsByCycle = {};
+    const key = String(Number(cycle || 1));
+    if (!line.approvalsByCycle[key]) {
+        line.approvalsByCycle[key] = {
+            processApproval: line.processApproval || 'Pending',
+            pipingApproval: line.pipingApproval || 'Pending'
+        };
+    }
+    return line.approvalsByCycle[key];
+}
+
+function syncCurrentCycleApproval(line, cycle) {
+    const bucket = getLineApprovalBucket(line, cycle);
+    line.processApproval = bucket?.processApproval || 'Pending';
+    line.pipingApproval = bucket?.pipingApproval || 'Pending';
+    return bucket;
+}
+
 function saveApprovalState() {
     try {
         const state = {};
         projectsData.forEach(p => {
-            state[p.id] = {};
+            state[p.id] = {
+                currentCycle: Number(p.currentCycle || 1),
+                lines: {}
+            };
             (p.lines || []).forEach((line, index) => {
-                state[p.id][String(line.id ?? index + 1)] = {
-                    processApproval: line.processApproval || 'Pending',
-                    pipingApproval: line.pipingApproval || 'Pending'
+                const id = String(line.id ?? index + 1);
+                const bucket = getLineApprovalBucket(line, p.currentCycle);
+                state[p.id].lines[id] = {
+                    processApproval: bucket?.processApproval || line.processApproval || 'Pending',
+                    pipingApproval: bucket?.pipingApproval || line.pipingApproval || 'Pending'
                 };
             });
         });
@@ -58,10 +83,16 @@ function saveApprovalState() {
 function hydrateApprovalState() {
     const saved = loadApprovalState();
     projectsData.forEach(p => {
+        const cycle = Number(p.currentCycle || 1);
         (p.lines || []).forEach((line, index) => {
-            const state = saved[p.id]?.[String(line.id ?? index + 1)] || {};
-            line.processApproval = state.processApproval || line.processApproval || 'Pending';
-            line.pipingApproval = state.pipingApproval || line.pipingApproval || 'Pending';
+            const legacy = saved[p.id]?.lines?.[String(line.id ?? index + 1)]
+                || saved[p.id]?.[String(line.id ?? index + 1)]
+                || {};
+            if (!line.approvalsByCycle || typeof line.approvalsByCycle !== 'object') line.approvalsByCycle = {};
+            const bucket = getLineApprovalBucket(line, cycle);
+            if (legacy.processApproval) bucket.processApproval = legacy.processApproval;
+            if (legacy.pipingApproval) bucket.pipingApproval = legacy.pipingApproval;
+            syncCurrentCycleApproval(line, cycle);
         });
     });
 }
@@ -96,11 +127,15 @@ function getRevisionOption(code) {
 
 function getCycleApprovalState(proj) {
     const lines = proj?.lines || [];
-    return {
-        processApproved: lines.length > 0 && lines.every(l => (l.processApproval || 'Pending') === 'Approved'),
-        pipingApproved: lines.length > 0 && lines.every(l => (l.pipingApproval || 'Pending') === 'Approved'),
-        allApproved: lines.length > 0 && lines.every(l => (l.processApproval || 'Pending') === 'Approved') && lines.every(l => (l.pipingApproval || 'Pending') === 'Approved')
-    };
+    const cycle = Number(proj?.currentCycle || 1);
+    lines.forEach(line => syncCurrentCycleApproval(line, cycle));
+    const processApproved = lines.length > 0 && lines.every(l => (l.processApproval || 'Pending') === 'Approved');
+    const pipingApproved = lines.length > 0 && lines.every(l => (l.pipingApproval || 'Pending') === 'Approved');
+    const allApproved = processApproved && pipingApproved;
+    const pmApproved = proj?.finalApproval?.role === 'Project Manager' &&
+        proj?.finalApproval?.status === 'Approved' &&
+        Number(proj?.finalApproval?.cycle) === cycle;
+    return { processApproved, pipingApproved, allApproved, pmApproved };
 }
 
 function getActiveCycleRule(proj) {
@@ -119,8 +154,14 @@ function hydrateRevisionState() {
         if (Array.isArray(state.cycleHistory)) p.cycleHistory = state.cycleHistory;
         if (Array.isArray(state.cycleSnapshots)) p.cycleSnapshots = state.cycleSnapshots;
         if (state.finalApproval) p.finalApproval = state.finalApproval;
-        p.revisionStatus = state.revisionStatus || p.revisionStatus || fallbackCode;
-        p.revisionNumber = state.revisionNumber || p.revisionNumber || getRevisionOption(p.revisionStatus).defaultNumber;
+        if (Array.isArray(p.cycleRules) && p.cycleRules.length) {
+            const activeRule = getActiveCycleRule(p);
+            p.revisionStatus = activeRule?.status || p.revisionStatus || fallbackCode;
+            p.revisionNumber = activeRule?.revision || p.revisionNumber || getRevisionOption(p.revisionStatus).defaultNumber;
+        } else {
+            p.revisionStatus = state.revisionStatus || p.revisionStatus || fallbackCode;
+            p.revisionNumber = state.revisionNumber || p.revisionNumber || getRevisionOption(p.revisionStatus).defaultNumber;
+        }
         p.documentStatus = getRevisionOption(p.revisionStatus).label;
         if (!Array.isArray(p.cycleHistory)) p.cycleHistory = [];
         if (!Array.isArray(p.cycleSnapshots)) p.cycleSnapshots = [];
@@ -367,7 +408,8 @@ function renderDashboard() {
     proj.name = String(proj.name ?? '').trim().toUpperCase();
     document.getElementById('breadcrumbProject').innerText = proj.name;
     document.getElementById('headerProjectName').value = proj.name;
-    document.getElementById('headerDocNumber').value = String(proj.docNumber || '').replace(/\s*-\s*/g, ' - ');
+    proj.docNumber = String(proj.docNumber || '').trim().toUpperCase();
+    document.getElementById('headerDocNumber').value = proj.docNumber.replace(/\s*-\s*/g, ' - ');
     const sidebarActive = document.getElementById('activeProjectText');
     if (sidebarActive) sidebarActive.innerText = proj.name;
     if (typeof initProjectNameMarquee === 'function') initProjectNameMarquee();
@@ -489,8 +531,9 @@ function renderRevisionHeader(proj) {
     // Header revision/status dibuat interaktif agar dapat diuji dari semua role.
     // Hak approval final tetap dikontrol oleh workflow AFC di fungsi approval.
     const canChangeRevision = !(Array.isArray(proj.cycleRules) && proj.cycleRules.length);
-    const currentRevision = proj.revisionNumber || option.defaultNumber;
-    const revisionValues = getRevisionValues(option.code);
+    const activeRule = getActiveCycleRule(proj);
+    const currentRevision = activeRule?.revision || proj.revisionNumber || option.defaultNumber;
+    const revisionValues = activeRule ? [String(currentRevision)] : getRevisionValues(option.code);
 
     // Tabel acuan mentor dipisahkan menjadi:
     // REVISI = nilai revision number (A.0/A/B/C/0/1/2/dst.)
@@ -538,8 +581,8 @@ function renderRevisionHeader(proj) {
         </div>
         ${Array.isArray(proj.cycleHistory) && proj.cycleHistory.length ? (() => {
             const last = proj.cycleHistory[proj.cycleHistory.length - 1];
-            return `<div class="revision-final-result" title="Hasil approval cycle terakhir">
-                <i class="fa-solid fa-circle-check"></i> Last Approved: <b>Cycle ${escapeHtml(last.cycle)}</b> • <b>Rev ${escapeHtml(last.revision)}</b> • <b>IFU</b>
+            return `<div class="revision-final-result" title="Revisi sebelumnya telah dikunci setelah Final Approval PM">
+                <i class="fa-solid fa-lock"></i> Lock Rev sebelumnya: <b>Cycle ${escapeHtml(last.cycle)}</b> • <b>Rev ${escapeHtml(last.revision)}</b> • <b>IFU</b>
             </div>`;
         })() : ''}
     `;
@@ -745,7 +788,14 @@ function renderTableRows(proj) {
         }
 
         let actionHtml = '-';
-        if (canApprove) {
+        if (isManager) {
+            actionHtml = `
+                <div class="approval-actions engineer-revision-actions">
+                    <button type="button" onclick="managerRequestRevision(${index})" class="revision-need-btn" title="Need Revision" aria-label="Need Revision">
+                        <i class="fa-solid fa-arrow-rotate-left"></i>
+                    </button>
+                </div>`;
+        } else if (canApprove) {
             actionHtml = `
                 <div class="approval-actions" aria-label="Approval actions">
                     <button type="button" onclick="setApprovalStatus(${index}, 'Approved', '${approvalStage}')" class="approval-btn approval-btn-approve" title="Approve" aria-label="Approve"><i class="fa-solid fa-check"></i></button>
@@ -848,20 +898,60 @@ function renderTableRows(proj) {
 
     const managerArea = document.getElementById('managerApprovalArea');
     const managerApprovalText = document.getElementById('managerApprovalText');
+    const managerApprovalStatusBadge = document.getElementById('managerApprovalStatusBadge');
     const managerFinalApproveBtn = document.getElementById('managerFinalApproveBtn');
-    if (isManager && approvalState.allApproved) {
+    if (isManager && managerArea) {
         managerArea.classList.remove('hidden');
         const cycle = Number(proj.currentCycle || 1);
         const rule = getActiveCycleRule(proj);
-        const revision = rule?.revision || proj.revisionNumber || 'A';
-        if (rule) {
-            if (managerApprovalText) managerApprovalText.textContent = `Lead Process dan Lead Piping sudah Approved. Rev ${revision} siap di-approve PM menjadi IFU.`;
-            if (managerFinalApproveBtn) managerFinalApproveBtn.querySelector('span').textContent = `Approve Rev ${revision} IFU`;
+        const revision = String(rule?.revision || proj.revisionNumber || 'A').toUpperCase();
+        const docStatus = String(rule?.status || proj.revisionStatus || 'IFR').toUpperCase();
+        // Label tombol PM selalu mengikuti status cycle aktif. IFU hanya dipakai setelah final approval.
+        const pmApproveLabel = `Approve Rev ${revision} ${docStatus}`;
+        const pmApproved = approvalState.pmApproved;
+
+        managerArea.classList.toggle('manager-pm-approved', pmApproved);
+        if (pmApproved) {
+            if (managerApprovalStatusBadge) {
+                managerApprovalStatusBadge.textContent = 'IFU • LOCKED';
+                managerApprovalStatusBadge.className = 'manager-status-badge bg-slate-100 text-slate-600 border border-slate-200';
+            }
+            if (managerApprovalText) managerApprovalText.textContent = `Rev ${revision} / IFU sudah Final Approved oleh Project Manager dan terkunci.`;
+            if (managerFinalApproveBtn) {
+                managerFinalApproveBtn.disabled = true;
+                managerFinalApproveBtn.className = 'px-4 py-2 bg-slate-300 text-slate-500 rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-not-allowed';
+                const span = managerFinalApproveBtn.querySelector('span');
+                if (span) span.textContent = `Rev ${revision} IFU • Locked`;
+            }
+        } else if (!approvalState.allApproved) {
+            const missing = [];
+            if (!approvalState.processApproved) missing.push('Lead Process');
+            if (!approvalState.pipingApproved) missing.push('Lead Piping');
+            if (managerApprovalStatusBadge) {
+                managerApprovalStatusBadge.textContent = 'PENDING PM';
+                managerApprovalStatusBadge.className = 'manager-status-badge bg-amber-50 text-amber-700 border border-amber-200';
+            }
+            if (managerApprovalText) managerApprovalText.textContent = `Rev ${revision} / ${docStatus} belum siap di-approve PM. Menunggu: ${missing.join(' dan ')}.`;
+            if (managerFinalApproveBtn) {
+                managerFinalApproveBtn.disabled = true;
+                managerFinalApproveBtn.className = 'px-4 py-2 bg-slate-300 text-slate-500 rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-not-allowed';
+                const span = managerFinalApproveBtn.querySelector('span');
+                if (span) span.textContent = pmApproveLabel;
+            }
         } else {
-            if (managerApprovalText) managerApprovalText.textContent = 'Lead Process dan Lead Piping sudah Approved. Siap Final Approval PM menjadi IFU?';
-            if (managerFinalApproveBtn) managerFinalApproveBtn.querySelector('span').textContent = 'Approve Rev IFU';
+            if (managerApprovalStatusBadge) {
+                managerApprovalStatusBadge.textContent = 'READY FOR PM';
+                managerApprovalStatusBadge.className = 'manager-status-badge bg-emerald-50 text-emerald-700 border border-emerald-200';
+            }
+            if (managerApprovalText) managerApprovalText.textContent = `Rev ${revision} / ${docStatus}. Lead Process dan Lead Piping sudah Approved; menunggu Final Approval Project Manager.`;
+            if (managerFinalApproveBtn) {
+                managerFinalApproveBtn.disabled = false;
+                managerFinalApproveBtn.className = 'px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5';
+                const span = managerFinalApproveBtn.querySelector('span');
+                if (span) span.textContent = pmApproveLabel;
+            }
         }
-    } else {
+    } else if (managerArea) {
         managerArea.classList.add('hidden');
     }
 
@@ -1160,11 +1250,13 @@ function resubmitWorkflowEdit(index, stage) {
         showModal('Data Belum Lengkap', 'Seq. No. wajib diisi sebelum data dikirim kembali.', 'warning');
         return;
     }
+    const bucket = getLineApprovalBucket(line, proj.currentCycle);
     if (stage === 'process') {
-        line.processApproval = 'Pending';
+        bucket.processApproval = 'Pending';
     } else {
-        line.pipingApproval = 'Pending';
+        bucket.pipingApproval = 'Pending';
     }
+    syncCurrentCycleApproval(line, proj.currentCycle);
     delete workflowEditState[stage][index];
     saveApprovalState();
     renderDashboard();
@@ -1202,11 +1294,13 @@ function setApprovalStatus(index, status, stage = 'process') {
         return;
     }
 
+    const bucket = getLineApprovalBucket(line, proj.currentCycle);
     if (stage === 'piping') {
-        line.pipingApproval = status;
+        bucket.pipingApproval = status;
     } else {
-        line.processApproval = status;
+        bucket.processApproval = status;
     }
+    syncCurrentCycleApproval(line, proj.currentCycle);
 
     saveApprovalState();
     renderDashboard();
@@ -1240,6 +1334,28 @@ function toggleProcessApproval(index) {
     setApprovalStatus(index, next, 'process');
 }
 
+function managerRequestRevision(index) {
+    const proj = projectsData[currentProjectIndex];
+    if (!proj || !proj.lines?.[index]) return;
+    if (!['Project Manager', 'System Administrator'].includes(currentUser?.role)) {
+        showModal('Akses Ditolak', 'Hanya Project Manager yang dapat meminta revisi.', 'warning');
+        return;
+    }
+
+    const line = proj.lines[index];
+    const bucket = getLineApprovalBucket(line, proj.currentCycle);
+    bucket.processApproval = 'Pending';
+    syncCurrentCycleApproval(line, proj.currentCycle);
+    line.pmRevisionRequested = true;
+    saveApprovalState();
+    renderDashboard();
+    showModal(
+        'Need Revision',
+        `Line ${index + 1} ditandai Need Revision oleh Project Manager. Data tidak dihapus dan menunggu perbaikan Process Engineer.`,
+        'info'
+    );
+}
+
 function managerFinalApproval() {
     const proj = projectsData[currentProjectIndex];
     const role = currentUser?.role;
@@ -1253,6 +1369,10 @@ function managerFinalApproval() {
     }
 
     const approvalState = getCycleApprovalState(proj);
+    if (approvalState.pmApproved) {
+        showModal('Sudah Di-approve', `Cycle ${proj.currentCycle} / Rev ${proj.revisionNumber} sudah Final Approved oleh Project Manager.`, 'info');
+        return;
+    }
     if (!approvalState.processApproved || !approvalState.pipingApproved) {
         const missing = [];
         if (!approvalState.processApproved) missing.push('Lead Process');
@@ -1318,9 +1438,16 @@ function managerFinalApproval() {
         // pada salinan baru sehingga histori tidak pernah ikut berubah.
         const nextCycle = oldCycle;
         const nextCycleLines = JSON.parse(JSON.stringify(proj.lines || []));
+        const nextCycleNumber = oldCycle + 1;
         nextCycleLines.forEach(line => {
+            if (!line.approvalsByCycle || typeof line.approvalsByCycle !== 'object') line.approvalsByCycle = {};
+            line.approvalsByCycle[String(nextCycleNumber)] = {
+                processApproval: 'Pending',
+                pipingApproval: 'Pending'
+            };
             line.processApproval = 'Pending';
             line.pipingApproval = 'Pending';
+            line.pmRevisionRequested = false;
         });
         proj.lines = nextCycleLines;
         applyProjectCycle(proj, nextCycle);
@@ -1976,9 +2103,10 @@ function applyProjectCycle(proj, cycleIndex) {
     const idx = Math.max(0, Math.min(cycleIndex, proj.cycleRules.length - 1));
     const rule = proj.cycleRules[idx];
     proj.currentCycle = idx + 1;
-    proj.revisionNumber = rule.revision;
+    proj.revisionNumber = String(rule.revision || '').toUpperCase();
     proj.revisionStatus = rule.status;
     proj.documentStatus = getRevisionOption(rule.status).label;
+    (proj.lines || []).forEach(line => syncCurrentCycleApproval(line, proj.currentCycle));
 }
 
 function advanceProjectCycleAfterApproval(proj) {
@@ -2091,7 +2219,7 @@ function saveEditedProjectRules() {
 
 function saveNewProject() {
     const name = document.getElementById('newProjectNameInput').value.trim().toUpperCase();
-    const docNumber = document.getElementById('newProjectDocNumberInput')?.value.trim();
+    const docNumber = document.getElementById('newProjectDocNumberInput')?.value.trim().toUpperCase();
     if (!name) {
         showModal("Peringatan", "Name project tidak boleh kosong.", "warning");
         return;
@@ -2109,7 +2237,7 @@ function saveNewProject() {
         showModal('Project Sudah Ada', `Project "${name}" sudah ada. Project baru tidak dibuat agar data tidak tertimpa.`, 'warning');
         return;
     }
-    const normalizedDocNumber = docNumber.toLowerCase().replace(/\s+/g, ' ').trim();
+    const normalizedDocNumber = docNumber.toUpperCase().replace(/\s+/g, ' ').trim();
     const duplicateDoc = projectsData.some(p => String(p.docNumber || '').toLowerCase().replace(/\s+/g, ' ').trim() === normalizedDocNumber);
     if (duplicateDoc) {
         showModal('Nomor Document Sudah Ada', `Nomor document "${docNumber}" sudah digunakan oleh project lain. Gunakan nomor document yang berbeda.`, 'warning');
