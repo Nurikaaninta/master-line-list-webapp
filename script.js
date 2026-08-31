@@ -18,6 +18,7 @@ let currentUser = null;
 // Mode revisi per line. Hanya line yang sudah mendapat keputusan yang dapat
 // dibuka kembali oleh Engineer melalui tombol Edit Data.
 const workflowEditState = { process: {}, piping: {} };
+let editingProjectRulesIndex = null;
 
 // Status/revisi dokumen mengikuti matriks revision pada prosedur engineering.
 // Disimpan per-project agar pilihan tetap ada setelah refresh browser.
@@ -81,6 +82,7 @@ function saveRevisionState() {
                 currentCycle: Number(p.currentCycle || 1),
                 cycleRules: Array.isArray(p.cycleRules) ? p.cycleRules : [],
                 cycleHistory: Array.isArray(p.cycleHistory) ? p.cycleHistory : [],
+                cycleSnapshots: Array.isArray(p.cycleSnapshots) ? p.cycleSnapshots : [],
                 finalApproval: p.finalApproval || null
             };
         });
@@ -115,11 +117,13 @@ function hydrateRevisionState() {
         if (Array.isArray(state.cycleRules) && state.cycleRules.length) p.cycleRules = normalizeProjectRules(state.cycleRules);
         if (Number.isFinite(Number(state.currentCycle)) && Number(state.currentCycle) >= 1) p.currentCycle = Number(state.currentCycle);
         if (Array.isArray(state.cycleHistory)) p.cycleHistory = state.cycleHistory;
+        if (Array.isArray(state.cycleSnapshots)) p.cycleSnapshots = state.cycleSnapshots;
         if (state.finalApproval) p.finalApproval = state.finalApproval;
         p.revisionStatus = state.revisionStatus || p.revisionStatus || fallbackCode;
         p.revisionNumber = state.revisionNumber || p.revisionNumber || getRevisionOption(p.revisionStatus).defaultNumber;
         p.documentStatus = getRevisionOption(p.revisionStatus).label;
         if (!Array.isArray(p.cycleHistory)) p.cycleHistory = [];
+        if (!Array.isArray(p.cycleSnapshots)) p.cycleSnapshots = [];
         if (!Number.isFinite(Number(p.currentCycle)) || Number(p.currentCycle) < 1) p.currentCycle = 1;
         p.cycleCompleted = !!p.cycleCompleted;
     });
@@ -205,6 +209,8 @@ hydrateRevisionState();
 saveRevisionState();
 
 projectsData.forEach(project => {
+    project.name = String(project.name ?? '').trim().toUpperCase();
+    project.docNumber = String(project.docNumber ?? '').trim();
     project.lines.forEach((line, index) => {
         line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
         if (line.ins_thick === '-' || line.ins_thick === null || line.ins_thick === undefined) {
@@ -247,6 +253,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const addNewRowBtn = document.getElementById('addNewRowBtn');
     if (addNewRowBtn) addNewRowBtn.addEventListener('click', addLineRow);
+    const projectNameInput = document.getElementById('newProjectNameInput');
+    if (projectNameInput) projectNameInput.addEventListener('input', () => { projectNameInput.value = projectNameInput.value.toUpperCase(); });
+
 
     const adminAddAccountForm = document.getElementById('adminAddAccountForm');
     if (adminAddAccountForm) {
@@ -355,9 +364,12 @@ function switchProjectFromHeader(val) {
 
 function renderDashboard() {
     const proj = projectsData[currentProjectIndex];
+    proj.name = String(proj.name ?? '').trim().toUpperCase();
     document.getElementById('breadcrumbProject').innerText = proj.name;
     document.getElementById('headerProjectName').value = proj.name;
     document.getElementById('headerDocNumber').value = String(proj.docNumber || '').replace(/\s*-\s*/g, ' - ');
+    const sidebarActive = document.getElementById('activeProjectText');
+    if (sidebarActive) sidebarActive.innerText = proj.name;
     if (typeof initProjectNameMarquee === 'function') initProjectNameMarquee();
 
     // Perbarui fungsi render dropdown project agar menyisipkan opsi Add Project di akhir[cite: 10]
@@ -1254,6 +1266,17 @@ function managerFinalApproval() {
         const oldRule = getActiveCycleRule(proj);
         const oldRevision = oldRule?.revision || proj.revisionNumber || 'A';
 
+        // Simpan snapshot immutable dari cycle yang baru selesai. Snapshot ini menjadi histori
+        // sehingga perubahan pada cycle berikutnya tidak pernah mengubah data cycle sebelumnya.
+        if (!Array.isArray(proj.cycleSnapshots)) proj.cycleSnapshots = [];
+        proj.cycleSnapshots.push({
+            cycle: oldCycle,
+            revision: oldRevision,
+            status: oldRule?.status || proj.revisionStatus || 'IFR',
+            frozenAt: new Date().toISOString(),
+            lines: JSON.parse(JSON.stringify(proj.lines || []))
+        });
+
         // Final approval PM menghasilkan status IFU untuk revisi aktif.
         proj.finalApproval = {
             role: 'Project Manager',
@@ -1291,14 +1314,18 @@ function managerFinalApproval() {
         }
 
         // Hanya setelah PM approve Rev X menjadi IFU, cycle berikutnya dibuka.
+        // Data cycle sebelumnya sudah dibekukan di cycleSnapshots; cycle berikutnya bekerja
+        // pada salinan baru sehingga histori tidak pernah ikut berubah.
         const nextCycle = oldCycle;
-        applyProjectCycle(proj, nextCycle);
-        proj.finalApproval = null;
-        proj.cycleCompleted = false;
-        (proj.lines || []).forEach(line => {
+        const nextCycleLines = JSON.parse(JSON.stringify(proj.lines || []));
+        nextCycleLines.forEach(line => {
             line.processApproval = 'Pending';
             line.pipingApproval = 'Pending';
         });
+        proj.lines = nextCycleLines;
+        applyProjectCycle(proj, nextCycle);
+        proj.finalApproval = null;
+        proj.cycleCompleted = false;
         saveApprovalState();
         saveRevisionState();
         renderDashboard();
@@ -1880,19 +1907,21 @@ function normalizeProjectRules(rules) {
     }));
 }
 
-function renderProjectRuleRows(rules = window._newProjectRules || defaultProjectRules()) {
+function renderProjectRuleRows(rules = window._newProjectRules || defaultProjectRules(), options = {}) {
     window._newProjectRules = normalizeProjectRules(rules);
+    const editMode = !!options.editMode;
+    const currentCycle = Number(options.currentCycle || 1);
     const container = document.getElementById('projectRuleRows');
     if (!container) return;
     container.innerHTML = window._newProjectRules.map((rule, i) => `
         <div data-rule-index="${i}" class="grid grid-cols-[72px_minmax(80px,120px)_minmax(180px,1fr)_36px] gap-2 items-center bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
             <div class="text-[10px] font-bold text-slate-700">Cycle ${i + 1}</div>
-            <input type="text" maxlength="8" value="${escapeHtml(rule.revision)}" data-rule-revision="${i}"
+            <input type="text" maxlength="8" value="${escapeHtml(rule.revision)}" data-rule-revision="${i}" ${editMode && i < currentCycle - 1 ? 'disabled' : ''}
                 class="w-full px-2.5 py-2 text-[11px] border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500 uppercase font-semibold">
-            <select data-rule-status="${i}" class="w-full px-2.5 py-2 text-[11px] border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500">
+            <select data-rule-status="${i}" ${editMode && i < currentCycle - 1 ? 'disabled' : ''} class="w-full px-2.5 py-2 text-[11px] border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500">
                 ${REVISION_OPTIONS.filter(o => !o.resultOnly).map(o => `<option value="${o.code}" ${o.code === rule.status ? 'selected' : ''}>${escapeHtml(o.code + ' - ' + o.label)}</option>`).join('')}
             </select>
-            <button type="button" onclick="removeProjectRuleRow(${i})" ${window._newProjectRules.length <= 1 ? 'disabled' : ''}
+            <button type="button" onclick="removeProjectRuleRow(${i})" ${(window._newProjectRules.length <= 1 || (editMode && i < currentCycle)) ? 'disabled' : ''}
                 class="w-8 h-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30" title="Hapus cycle" aria-label="Hapus cycle ${i + 1}">
                 <i class="fa-solid fa-trash-can"></i>
             </button>
@@ -1986,23 +2015,82 @@ function advanceProjectCycleAfterApproval(proj) {
 }
 
 function openAddProjectModal() {
+    editingProjectRulesIndex = null;
     const modal = document.getElementById('addProjectModal');
     if (!modal) return;
     const input = document.getElementById('newProjectNameInput');
     const docInput = document.getElementById('newProjectDocNumberInput');
-    if (input) input.value = '';
-    if (docInput) docInput.value = '';
+    if (input) { input.value = ''; input.closest('div')?.classList.remove('hidden'); }
+    if (docInput) { docInput.value = ''; docInput.closest('div')?.classList.remove('hidden'); }
+    const title = modal.querySelector('h4');
+    if (title) title.innerHTML = '<i class="fa-solid fa-folder-plus text-emerald-600"></i> Tambah Project Baru';
+    const saveBtn = modal.querySelector('button[onclick="saveEditedProjectRules()"]') || modal.querySelector('button[onclick="saveNewProject()"]');
+    if (saveBtn) { saveBtn.textContent = 'Simpan & Pilih'; saveBtn.setAttribute('onclick', 'saveNewProject()'); }
     renderProjectRuleRows(defaultProjectRules());
     modal.classList.remove('hidden');
     setTimeout(() => input?.focus(), 50);
 }
 
 function closeAddProjectModal() {
-    document.getElementById('addProjectModal')?.classList.add('hidden');
+    const modal = document.getElementById('addProjectModal');
+    if (modal) modal.classList.add('hidden');
+    editingProjectRulesIndex = null;
+}
+
+function openEditProjectRulesModal(projectIndex = currentProjectIndex) {
+    const proj = projectsData[projectIndex];
+    const modal = document.getElementById('addProjectModal');
+    if (!proj || !modal) return;
+    editingProjectRulesIndex = projectIndex;
+    const title = modal.querySelector('h4');
+    if (title) title.innerHTML = '<i class="fa-solid fa-sliders text-emerald-600"></i> Edit Setting Rule Cycle';
+    const nameInput = document.getElementById('newProjectNameInput');
+    const docInput = document.getElementById('newProjectDocNumberInput');
+    if (nameInput) { nameInput.value = String(proj.name || '').toUpperCase(); nameInput.closest('div')?.classList.add('hidden'); }
+    if (docInput) { docInput.value = String(proj.docNumber || ''); docInput.closest('div')?.classList.add('hidden'); }
+    renderProjectRuleRows(proj.cycleRules || defaultProjectRules(), { editMode: true, currentCycle: Number(proj.currentCycle || 1) });
+    const saveBtn = modal.querySelector('button[onclick="saveNewProject()"]');
+    if (saveBtn) { saveBtn.textContent = 'Simpan Setting Rule'; saveBtn.setAttribute('onclick', 'saveEditedProjectRules()'); }
+    modal.classList.remove('hidden');
+}
+
+function saveEditedProjectRules() {
+    const idx = editingProjectRulesIndex;
+    const proj = projectsData[idx];
+    if (!proj) return;
+    const rules = collectProjectRules();
+    if (!rules) return;
+    const current = Number(proj.currentCycle || 1);
+    const historyCount = Array.isArray(proj.cycleHistory) ? proj.cycleHistory.length : 0;
+    if (historyCount > 0) {
+        for (let i = 0; i < Math.min(current - 1, rules.length); i++) {
+            const oldRule = proj.cycleRules?.[i];
+            if (oldRule && (rules[i].revision !== oldRule.revision || rules[i].status !== oldRule.status)) {
+                showModal('Cycle Sudah Dikunci', `Cycle ${i + 1} sudah disetujui dan tidak dapat diubah lagi.`, 'warning');
+                return;
+            }
+        }
+    }
+    if (rules.length < current) {
+        showModal('Setting Rule Tidak Valid', `Jumlah cycle tidak boleh kurang dari Cycle ${current} yang sedang aktif.`, 'warning');
+        return;
+    }
+    proj.cycleRules = normalizeProjectRules(rules);
+    const activeRule = getActiveCycleRule(proj);
+    if (activeRule) {
+        proj.revisionNumber = activeRule.revision;
+        proj.revisionStatus = activeRule.status;
+        proj.documentStatus = getRevisionOption(activeRule.status).label;
+    }
+    saveRevisionState();
+    closeAddProjectModal();
+    editingProjectRulesIndex = null;
+    renderDashboard();
+    showModal('Setting Rule Disimpan', `Setting Rule project "${String(proj.name || '').toUpperCase()}" berhasil diperbarui.`, 'success');
 }
 
 function saveNewProject() {
-    const name = document.getElementById('newProjectNameInput').value.trim();
+    const name = document.getElementById('newProjectNameInput').value.trim().toUpperCase();
     const docNumber = document.getElementById('newProjectDocNumberInput')?.value.trim();
     if (!name) {
         showModal("Peringatan", "Name project tidak boleh kosong.", "warning");

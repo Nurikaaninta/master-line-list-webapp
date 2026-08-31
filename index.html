@@ -154,6 +154,9 @@
                         <button onclick="openAddProjectModal(); closeSidebarProjectDropdown();" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-slate-800 transition font-medium">
                             + Add New Project...
                         </button>
+                        <button onclick="openEditProjectRulesModal(currentProjectIndex); closeSidebarProjectDropdown();" class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition font-medium border-t border-slate-700">
+                            <i class="fa-solid fa-sliders mr-1"></i> Edit Cycle / Setting Rule
+                        </button>
                     </div>
                 </div>
 
@@ -786,10 +789,16 @@
                         ? "bg-slate-700 text-white font-semibold" 
                         : "text-blue-400 hover:bg-slate-800 hover:text-blue-300";
 
+                    const displayName = String(proj.name || '').trim().toUpperCase();
                     html += `
-                        <button onclick="selectSidebarProject(${idx})" class="w-full text-left px-3 py-2 transition truncate ${itemStyle}">
-                            ${proj.name}
-                        </button>
+                        <div class="flex items-center ${isActive ? 'bg-slate-700' : 'bg-transparent'}">
+                            <button onclick="selectSidebarProject(${idx})" class="flex-1 min-w-0 text-left px-3 py-2 transition truncate ${isActive ? 'text-white font-semibold' : 'text-blue-400 hover:bg-slate-800 hover:text-blue-300'}">
+                                ${displayName}
+                            </button>
+                            <button onclick="event.stopPropagation(); openEditProjectRulesModal(${idx}); closeSidebarProjectDropdown();" class="shrink-0 px-2 py-2 ${isActive ? 'text-slate-200 hover:text-white' : 'text-slate-500 hover:text-blue-300'}" title="Edit Cycle" aria-label="Edit Cycle">
+                                <i class="fa-solid fa-pen-to-square text-[10px]"></i>
+                            </button>
+                        </div>
                     `;
                 });
             }
@@ -806,7 +815,7 @@
             
             const activeText = document.getElementById('activeProjectText');
             if (activeText && projectsData[idx]) {
-                activeText.innerText = projectsData[idx].name;
+                activeText.innerText = String(projectsData[idx].name || '').trim().toUpperCase();
             }
 
             closeSidebarProjectDropdown();
