@@ -26,6 +26,7 @@ const REVISION_OPTIONS = [
     { code: 'IFR', label: 'Issued for Review', format: 'A; B; C; ...; continue', defaultNumber: 'A', status: 'Issued for Review' },
     { code: 'IFA', label: 'Issued for Approval', format: 'B; C; D; ...; continue', defaultNumber: 'B', status: 'Issued for Approval' },
     { code: 'IFC', label: 'Issued for Construction', format: '0; 1; 2; ...; n', defaultNumber: '0', status: 'Issued for Construction' },
+    { code: 'IFU', label: 'Issued for Use', format: 'Approval result only', defaultNumber: '', status: 'Issued for Use', resultOnly: true },
     { code: 'ASB', label: 'As-Built', format: '1; 2; 3; ...; n', defaultNumber: '1', status: 'As-Built' },
     { code: 'IFI', label: 'Issued for Information', format: '0, 1, 2, 3, ...; n', defaultNumber: '0', status: 'Issued for Information' }
 ];
@@ -76,7 +77,11 @@ function saveRevisionState() {
             state[p.id] = {
                 revisionStatus: p.revisionStatus || 'IFR',
                 revisionNumber: p.revisionNumber || getRevisionOption(p.revisionStatus || 'IFR').defaultNumber,
-                documentStatus: getRevisionOption(p.revisionStatus || 'IFR').label
+                documentStatus: getRevisionOption(p.revisionStatus || 'IFR').label,
+                currentCycle: Number(p.currentCycle || 1),
+                cycleRules: Array.isArray(p.cycleRules) ? p.cycleRules : [],
+                cycleHistory: Array.isArray(p.cycleHistory) ? p.cycleHistory : [],
+                finalApproval: p.finalApproval || null
             };
         });
         localStorage.setItem(REVISION_STORAGE_KEY, JSON.stringify(state));
@@ -87,15 +92,36 @@ function getRevisionOption(code) {
     return REVISION_OPTIONS.find(o => o.code === code) || REVISION_OPTIONS[1];
 }
 
+function getCycleApprovalState(proj) {
+    const lines = proj?.lines || [];
+    return {
+        processApproved: lines.length > 0 && lines.every(l => (l.processApproval || 'Pending') === 'Approved'),
+        pipingApproved: lines.length > 0 && lines.every(l => (l.pipingApproval || 'Pending') === 'Approved'),
+        allApproved: lines.length > 0 && lines.every(l => (l.processApproval || 'Pending') === 'Approved') && lines.every(l => (l.pipingApproval || 'Pending') === 'Approved')
+    };
+}
+
+function getActiveCycleRule(proj) {
+    if (!proj || !Array.isArray(proj.cycleRules) || !proj.cycleRules.length) return null;
+    return proj.cycleRules[Math.max(0, Number(proj.currentCycle || 1) - 1)] || null;
+}
+
 function hydrateRevisionState() {
     const saved = loadRevisionState();
     projectsData.forEach((p, index) => {
         // Proyek pertama sudah seluruh line approved, sehingga contoh AFC tetap tampil.
         const fallbackCode = index === 0 && p.lines.every(l => l.processApproval === 'Approved') ? 'IFC' : 'IFR';
         const state = saved[p.id] || {};
+        if (Array.isArray(state.cycleRules) && state.cycleRules.length) p.cycleRules = normalizeProjectRules(state.cycleRules);
+        if (Number.isFinite(Number(state.currentCycle)) && Number(state.currentCycle) >= 1) p.currentCycle = Number(state.currentCycle);
+        if (Array.isArray(state.cycleHistory)) p.cycleHistory = state.cycleHistory;
+        if (state.finalApproval) p.finalApproval = state.finalApproval;
         p.revisionStatus = state.revisionStatus || p.revisionStatus || fallbackCode;
         p.revisionNumber = state.revisionNumber || p.revisionNumber || getRevisionOption(p.revisionStatus).defaultNumber;
         p.documentStatus = getRevisionOption(p.revisionStatus).label;
+        if (!Array.isArray(p.cycleHistory)) p.cycleHistory = [];
+        if (!Number.isFinite(Number(p.currentCycle)) || Number(p.currentCycle) < 1) p.currentCycle = 1;
+        p.cycleCompleted = !!p.cycleCompleted;
     });
 }
 
@@ -450,7 +476,7 @@ function renderRevisionHeader(proj) {
     const isFinalAfc = proj.revisionStatus === 'IFC' && approvedCount === totalCount && totalCount > 0;
     // Header revision/status dibuat interaktif agar dapat diuji dari semua role.
     // Hak approval final tetap dikontrol oleh workflow AFC di fungsi approval.
-    const canChangeRevision = true;
+    const canChangeRevision = !(Array.isArray(proj.cycleRules) && proj.cycleRules.length);
     const currentRevision = proj.revisionNumber || option.defaultNumber;
     const revisionValues = getRevisionValues(option.code);
 
@@ -463,12 +489,13 @@ function renderRevisionHeader(proj) {
 
     // STATUS mengikuti format tabel mentor: CODE - Description
     // Contoh: IFC - Issued for Construction
-    const statusOptions = REVISION_OPTIONS.map(item => `
+    const statusOptions = REVISION_OPTIONS.filter(item => !item.resultOnly).map(item => `
         <option value="${item.code}" ${item.code === option.code ? 'selected' : ''}>${escapeHtml(item.code + ' - ' + item.label)}</option>
     `).join('');
 
     const revisionBadgeCode = option.code === 'IFC' ? 'AFC' : option.code;
-    const revisionBadge = `REV ${escapeHtml(currentRevision)} (${revisionBadgeCode})`;
+    const cycleBadge = Array.isArray(proj.cycleRules) && proj.cycleRules.length ? `CYCLE ${Number(proj.currentCycle || 1)}` : '';
+    const revisionBadge = `${cycleBadge ? cycleBadge + ' • ' : ''}REV ${escapeHtml(currentRevision)} (${revisionBadgeCode})`;
 
     container.innerHTML = `
         <div class="revision-header-grid">
@@ -497,12 +524,19 @@ function renderRevisionHeader(proj) {
             <span class="revision-badge-title">${revisionBadge}:</span>
             <span class="revision-badge-value">${approvedCount} Lines Approved</span>
         </div>
+        ${Array.isArray(proj.cycleHistory) && proj.cycleHistory.length ? (() => {
+            const last = proj.cycleHistory[proj.cycleHistory.length - 1];
+            return `<div class="revision-final-result" title="Hasil approval cycle terakhir">
+                <i class="fa-solid fa-circle-check"></i> Last Approved: <b>Cycle ${escapeHtml(last.cycle)}</b> • <b>Rev ${escapeHtml(last.revision)}</b> • <b>IFU</b>
+            </div>`;
+        })() : ''}
     `;
 }
 
 function changeRevisionNumber(value) {
     const proj = projectsData[currentProjectIndex];
     if (!proj) return;
+    if (Array.isArray(proj.cycleRules) && proj.cycleRules.length) { renderRevisionHeader(proj); return; }
     // Revision dapat dipilih oleh user yang sedang mengelola dokumen.
     // Nilai tetap dibatasi hanya pada format revision yang sesuai dengan STATUS.
     const allowed = getRevisionValues(proj.revisionStatus || 'IFR');
@@ -519,6 +553,7 @@ function changeRevisionStatus(code) {
     const proj = projectsData[currentProjectIndex];
     const option = getRevisionOption(code);
     if (!proj) return;
+    if (Array.isArray(proj.cycleRules) && proj.cycleRules.length) { renderRevisionHeader(proj); return; }
 
     // STATUS menentukan format/nilai awal REVISI secara otomatis.
     // Tidak dibatasi role di header agar dropdown benar-benar dapat digunakan
@@ -667,7 +702,8 @@ function renderTableRows(proj) {
     const engineerRole = approvalStage === 'process' ? 'Process Engineer' : 'Piping Engineer';
     const isStageEngineer = currentUser && currentUser.role === engineerRole;
 
-    let allApproved = proj.lines.length > 0 && proj.lines.every(l => l.processApproval === 'Approved');
+    const approvalState = getCycleApprovalState(proj);
+    let allApproved = approvalState.allApproved;
 
     // Seq. No. harus unik. Baris dengan Seq. No. duplikat diberi tanda merah.
     const seqCounts = {};
@@ -681,7 +717,11 @@ function renderTableRows(proj) {
 
         const tr = document.createElement('tr');
         tr.dataset.lineIndex = String(index);
-        const currentStatus = approvalStage === 'piping' ? (line.pipingApproval || 'Pending') : (line.processApproval || 'Pending');
+        // Setiap line harus selalu memiliki status approval yang terlihat.
+        // Jika data lama/import tidak memiliki field approval, default-nya Pending.
+        if (!['Pending', 'Approved', 'Rejected', 'Deleted'].includes(line.processApproval)) line.processApproval = 'Pending';
+        if (!['Pending', 'Approved', 'Rejected', 'Deleted'].includes(line.pipingApproval)) line.pipingApproval = 'Pending';
+        const currentStatus = approvalStage === 'piping' ? line.pipingApproval : line.processApproval;
         const rowInEditMode = !!workflowEditState[approvalStage]?.[index];
         const canEditRow = !!canEdit && (currentStatus === 'Pending' || rowInEditMode);
         const canEditRemarksRow = canEditRow || !!isLeadProcessOnly;
@@ -777,6 +817,7 @@ function renderTableRows(proj) {
             <td class="text-center bg-amber-50/40 approval-status-cell">
                 ${(() => {
                     const status = approvalStage === 'piping' ? (line.pipingApproval || 'Pending') : (line.processApproval || 'Pending');
+                    // Jangan pernah render cell kosong; status default selalu Pending.
                     const statusClass = status === 'Approved' ? 'approval-approved' : status === 'Rejected' ? 'approval-rejected' : status === 'Deleted' ? 'approval-deleted' : 'approval-pending';
                     return `<span class="approval-status-badge ${statusClass}">${status}</span>`;
                 })()}
@@ -794,8 +835,20 @@ function renderTableRows(proj) {
     if (lineListScroll) lineListScroll.scrollLeft = 0;
 
     const managerArea = document.getElementById('managerApprovalArea');
-    if (isManager && allApproved) {
+    const managerApprovalText = document.getElementById('managerApprovalText');
+    const managerFinalApproveBtn = document.getElementById('managerFinalApproveBtn');
+    if (isManager && approvalState.allApproved) {
         managerArea.classList.remove('hidden');
+        const cycle = Number(proj.currentCycle || 1);
+        const rule = getActiveCycleRule(proj);
+        const revision = rule?.revision || proj.revisionNumber || 'A';
+        if (rule) {
+            if (managerApprovalText) managerApprovalText.textContent = `Lead Process dan Lead Piping sudah Approved. Rev ${revision} siap di-approve PM menjadi IFU.`;
+            if (managerFinalApproveBtn) managerFinalApproveBtn.querySelector('span').textContent = `Approve Rev ${revision} IFU`;
+        } else {
+            if (managerApprovalText) managerApprovalText.textContent = 'Lead Process dan Lead Piping sudah Approved. Siap Final Approval PM menjadi IFU?';
+            if (managerFinalApproveBtn) managerFinalApproveBtn.querySelector('span').textContent = 'Approve Rev IFU';
+        }
     } else {
         managerArea.classList.add('hidden');
     }
@@ -1141,13 +1194,6 @@ function setApprovalStatus(index, status, stage = 'process') {
         line.pipingApproval = status;
     } else {
         line.processApproval = status;
-        // AFC hanya valid jika seluruh line telah Approved pada tahap Process.
-        if (status !== 'Approved' && proj.revisionStatus === 'IFC') {
-            proj.revisionStatus = 'IFR';
-            proj.revisionNumber = 'A';
-            proj.documentStatus = getRevisionOption('IFR').label;
-            saveRevisionState();
-        }
     }
 
     saveApprovalState();
@@ -1184,17 +1230,92 @@ function toggleProcessApproval(index) {
 
 function managerFinalApproval() {
     const proj = projectsData[currentProjectIndex];
-    if (!proj || !proj.lines.length || !proj.lines.every(l => l.processApproval === 'Approved')) {
-        showModal("Belum Bisa AFC", "Semua line list harus Approved terlebih dahulu.", "warning");
+    const role = currentUser?.role;
+    if (!proj || !proj.lines.length) {
+        showModal('Belum Bisa Approve', 'Belum ada line list yang dapat di-approve.', 'warning');
+        return;
+    }
+    if (!['Project Manager', 'System Administrator'].includes(role)) {
+        showModal('Akses Ditolak', 'Hanya Project Manager yang dapat memberikan Final Approval menjadi IFU.', 'warning');
         return;
     }
 
-    proj.revisionStatus = 'IFC';
-    proj.revisionNumber = '0';
-    proj.documentStatus = getRevisionOption('IFC').label;
+    const approvalState = getCycleApprovalState(proj);
+    if (!approvalState.processApproved || !approvalState.pipingApproved) {
+        const missing = [];
+        if (!approvalState.processApproved) missing.push('Lead Process');
+        if (!approvalState.pipingApproved) missing.push('Lead Piping');
+        showModal('Belum Bisa Approve', `Final Approval belum dapat dilakukan. Menunggu approval: ${missing.join(' dan ')}.`, 'warning');
+        return;
+    }
+
+    if (Array.isArray(proj.cycleRules) && proj.cycleRules.length) {
+        const oldCycle = Number(proj.currentCycle || 1);
+        const oldRule = getActiveCycleRule(proj);
+        const oldRevision = oldRule?.revision || proj.revisionNumber || 'A';
+
+        // Final approval PM menghasilkan status IFU untuk revisi aktif.
+        proj.finalApproval = {
+            role: 'Project Manager',
+            status: 'Approved',
+            resultStatus: 'IFU',
+            revision: oldRevision,
+            cycle: oldCycle,
+            approvedAt: new Date().toISOString()
+        };
+
+        if (!Array.isArray(proj.cycleHistory)) proj.cycleHistory = [];
+        proj.cycleHistory.push({
+            cycle: oldCycle,
+            revision: oldRevision,
+            configuredStatus: oldRule?.status || proj.revisionStatus || 'IFR',
+            finalStatus: 'IFU',
+            processApproval: 'Approved',
+            pipingApproval: 'Approved',
+            pmApproval: 'Approved',
+            approvedAt: new Date().toISOString()
+        });
+
+        // Tampilkan hasil Rev X / IFU sebelum membuka cycle berikutnya.
+        proj.revisionNumber = oldRevision;
+        proj.revisionStatus = 'IFU';
+        proj.documentStatus = getRevisionOption('IFU').label;
+        saveRevisionState();
+        saveApprovalState();
+
+        if (oldCycle >= proj.cycleRules.length) {
+            proj.cycleCompleted = true;
+            renderDashboard();
+            showModal('Final Approval Selesai', `Rev ${oldRevision} / IFU telah disetujui Lead Process, Lead Piping, dan Project Manager. Semua cycle project telah selesai.`, 'success');
+            return;
+        }
+
+        // Hanya setelah PM approve Rev X menjadi IFU, cycle berikutnya dibuka.
+        const nextCycle = oldCycle;
+        applyProjectCycle(proj, nextCycle);
+        proj.finalApproval = null;
+        proj.cycleCompleted = false;
+        (proj.lines || []).forEach(line => {
+            line.processApproval = 'Pending';
+            line.pipingApproval = 'Pending';
+        });
+        saveApprovalState();
+        saveRevisionState();
+        renderDashboard();
+
+        const nextRule = getActiveCycleRule(proj);
+        showModal('Cycle Berikutnya Aktif', `Rev ${oldRevision} / IFU telah disetujui. Sekarang Cycle ${proj.currentCycle} / Rev ${nextRule.revision} / ${getRevisionOption(nextRule.status).label} aktif dan menunggu approval baru.`, 'success');
+        return;
+    }
+
+    // Project tanpa Setting Rule: tetap menggunakan Final Approval sebagai IFU.
+    const revision = proj.revisionNumber || 'A';
+    proj.revisionStatus = 'IFU';
+    proj.documentStatus = getRevisionOption('IFU').label;
+    proj.finalApproval = { role: 'Project Manager', status: 'Approved', resultStatus: 'IFU', revision, approvedAt: new Date().toISOString() };
     saveRevisionState();
     renderDashboard();
-    showModal("Sukses AFC!", `Semua ${proj.lines.length} line list telah disetujui Project Manager. Dokumen berstatus Approved For Construction (AFC).`, "success");
+    showModal('Final Approval Selesai', `Rev ${revision} / IFU telah disetujui Lead Process, Lead Piping, dan Project Manager.`, 'success');
 }
 
 function filterByColumn(colKey, val) {
@@ -1742,34 +1863,195 @@ function closeAddAccountModal() {
     document.getElementById('addAccountModal').classList.add('hidden');
 }
 
+function defaultProjectRules() {
+    return [
+        { cycle: 1, revision: 'A', status: 'IFC' },
+        { cycle: 2, revision: 'B', status: 'IFR' },
+        { cycle: 3, revision: 'C', status: 'IFR' }
+    ];
+}
+
+function normalizeProjectRules(rules) {
+    const source = Array.isArray(rules) && rules.length ? rules : defaultProjectRules();
+    return source.map((r, i) => ({
+        cycle: i + 1,
+        revision: String(r.revision ?? '').trim() || String.fromCharCode(65 + i),
+        status: REVISION_OPTIONS.some(o => o.code === r.status) ? r.status : 'IFR'
+    }));
+}
+
+function renderProjectRuleRows(rules = window._newProjectRules || defaultProjectRules()) {
+    window._newProjectRules = normalizeProjectRules(rules);
+    const container = document.getElementById('projectRuleRows');
+    if (!container) return;
+    container.innerHTML = window._newProjectRules.map((rule, i) => `
+        <div data-rule-index="${i}" class="grid grid-cols-[72px_minmax(80px,120px)_minmax(180px,1fr)_36px] gap-2 items-center bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
+            <div class="text-[10px] font-bold text-slate-700">Cycle ${i + 1}</div>
+            <input type="text" maxlength="8" value="${escapeHtml(rule.revision)}" data-rule-revision="${i}"
+                class="w-full px-2.5 py-2 text-[11px] border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500 uppercase font-semibold">
+            <select data-rule-status="${i}" class="w-full px-2.5 py-2 text-[11px] border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500">
+                ${REVISION_OPTIONS.filter(o => !o.resultOnly).map(o => `<option value="${o.code}" ${o.code === rule.status ? 'selected' : ''}>${escapeHtml(o.code + ' - ' + o.label)}</option>`).join('')}
+            </select>
+            <button type="button" onclick="removeProjectRuleRow(${i})" ${window._newProjectRules.length <= 1 ? 'disabled' : ''}
+                class="w-8 h-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30" title="Hapus cycle" aria-label="Hapus cycle ${i + 1}">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </div>`).join('');
+
+    container.querySelectorAll('[data-rule-revision]').forEach(input => input.addEventListener('input', e => {
+        const i = Number(e.target.dataset.ruleRevision);
+        window._newProjectRules[i].revision = e.target.value.trim().toUpperCase();
+    }));
+    container.querySelectorAll('[data-rule-status]').forEach(select => select.addEventListener('change', e => {
+        const i = Number(e.target.dataset.ruleStatus);
+        window._newProjectRules[i].status = e.target.value;
+    }));
+}
+
+function addProjectRuleRow() {
+    const rules = normalizeProjectRules(window._newProjectRules);
+    const last = rules[rules.length - 1];
+    const nextRevision = /^[A-Z]$/.test(last.revision) ? String.fromCharCode(Math.min(90, last.revision.charCodeAt(0) + 1)) : String(rules.length + 1);
+    rules.push({ cycle: rules.length + 1, revision: nextRevision, status: 'IFR' });
+    renderProjectRuleRows(rules);
+}
+
+function removeProjectRuleRow(index) {
+    const rules = normalizeProjectRules(window._newProjectRules);
+    if (rules.length <= 1) return;
+    rules.splice(index, 1);
+    renderProjectRuleRows(rules);
+}
+
+function collectProjectRules() {
+    const rules = normalizeProjectRules(window._newProjectRules);
+    rules.forEach((rule, i) => {
+        const revisionEl = document.querySelector(`[data-rule-revision="${i}"]`);
+        const statusEl = document.querySelector(`[data-rule-status="${i}"]`);
+        rule.revision = String(revisionEl?.value || rule.revision).trim().toUpperCase();
+        rule.status = statusEl?.value || rule.status;
+    });
+    const message = document.getElementById('projectRuleMessage');
+    const invalid = rules.find(r => !r.revision || !REVISION_OPTIONS.some(o => o.code === r.status));
+    if (invalid) {
+        if (message) { message.textContent = 'Setiap cycle wajib memiliki Revisi dan Status.'; message.classList.remove('hidden'); }
+        return null;
+    }
+    if (message) message.classList.add('hidden');
+    return rules;
+}
+
+function applyProjectCycle(proj, cycleIndex) {
+    if (!proj) return;
+    proj.cycleRules = normalizeProjectRules(proj.cycleRules);
+    const idx = Math.max(0, Math.min(cycleIndex, proj.cycleRules.length - 1));
+    const rule = proj.cycleRules[idx];
+    proj.currentCycle = idx + 1;
+    proj.revisionNumber = rule.revision;
+    proj.revisionStatus = rule.status;
+    proj.documentStatus = getRevisionOption(rule.status).label;
+}
+
+function advanceProjectCycleAfterApproval(proj) {
+    if (!proj || !Array.isArray(proj.cycleRules) || !proj.cycleRules.length) return false;
+    const current = Math.max(1, Number(proj.currentCycle || 1));
+    const currentRule = proj.cycleRules[current - 1];
+    if (!currentRule) return false;
+
+    if (!Array.isArray(proj.cycleHistory)) proj.cycleHistory = [];
+    proj.cycleHistory.push({
+        cycle: current,
+        revision: currentRule.revision,
+        status: currentRule.status,
+        approvedAt: new Date().toISOString()
+    });
+
+    if (current >= proj.cycleRules.length) {
+        proj.cycleCompleted = true;
+        saveRevisionState();
+        saveApprovalState();
+        return false;
+    }
+
+    // Hanya setelah cycle aktif benar-benar di-approve, cycle berikutnya dibuka.
+    applyProjectCycle(proj, current);
+    proj.cycleCompleted = false;
+    (proj.lines || []).forEach(line => {
+        line.processApproval = 'Pending';
+        line.pipingApproval = 'Pending';
+    });
+    saveApprovalState();
+    saveRevisionState();
+    return true;
+}
+
 function openAddProjectModal() {
-    document.getElementById('addProjectModal').classList.remove('hidden');
+    const modal = document.getElementById('addProjectModal');
+    if (!modal) return;
+    const input = document.getElementById('newProjectNameInput');
+    const docInput = document.getElementById('newProjectDocNumberInput');
+    if (input) input.value = '';
+    if (docInput) docInput.value = '';
+    renderProjectRuleRows(defaultProjectRules());
+    modal.classList.remove('hidden');
+    setTimeout(() => input?.focus(), 50);
 }
 
 function closeAddProjectModal() {
-    document.getElementById('addProjectModal').classList.add('hidden');
+    document.getElementById('addProjectModal')?.classList.add('hidden');
 }
 
 function saveNewProject() {
     const name = document.getElementById('newProjectNameInput').value.trim();
+    const docNumber = document.getElementById('newProjectDocNumberInput')?.value.trim();
     if (!name) {
-        showModal("Peringatan", "Nama project tidak boleh kosong.", "warning");
+        showModal("Peringatan", "Name project tidak boleh kosong.", "warning");
         return;
     }
+    if (!docNumber) {
+        showModal("Peringatan", "Nomor document tidak boleh kosong.", "warning");
+        document.getElementById('newProjectDocNumberInput')?.focus();
+        return;
+    }
+    const rules = collectProjectRules();
+    if (!rules) return;
+
+    const duplicateName = projectsData.some(p => String(p.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (duplicateName) {
+        showModal('Project Sudah Ada', `Project "${name}" sudah ada. Project baru tidak dibuat agar data tidak tertimpa.`, 'warning');
+        return;
+    }
+    const normalizedDocNumber = docNumber.toLowerCase().replace(/\s+/g, ' ').trim();
+    const duplicateDoc = projectsData.some(p => String(p.docNumber || '').toLowerCase().replace(/\s+/g, ' ').trim() === normalizedDocNumber);
+    if (duplicateDoc) {
+        showModal('Nomor Document Sudah Ada', `Nomor document "${docNumber}" sudah digunakan oleh project lain. Gunakan nomor document yang berbeda.`, 'warning');
+        return;
+    }
+
     const newProj = {
-        id: `proj-${projectsData.length + 1}`,
+        id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: name,
-        docNumber: `E260${projectsData.length + 1}-100-A001`,
+        docNumber: docNumber,
         leftLogo: "",
         rightLogo: "",
-        lines: []
+        lines: [],
+        cycleRules: rules,
+        currentCycle: 1,
+        cycleHistory: [],
+        finalApproval: null,
+        cycleCompleted: false,
+        revisionStatus: rules[0].status,
+        revisionNumber: rules[0].revision,
+        documentStatus: getRevisionOption(rules[0].status).label
     };
     projectsData.push(newProj);
     currentProjectIndex = projectsData.length - 1;
     currentProject = currentProjectIndex;
+    saveRevisionState();
+    saveApprovalState();
     closeAddProjectModal();
     renderDashboard();
-    showModal("Berhasil", `Project "${name}" berhasil ditambahkan dan dipilih!`, "success");
+    showModal("Berhasil", `Project "${name}" berhasil ditambahkan dengan Document No. ${docNumber}. Cycle 1 / Revisi ${rules[0].revision} / ${getRevisionOption(rules[0].status).label} aktif.`, "success");
 }
 
 // ==========================================
