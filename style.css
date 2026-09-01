@@ -1355,3 +1355,5 @@ body {
 
 /* Document number: always render uppercase, matching Create Project input. */
 .document-number-value, #projectDocumentNumber, [data-project-document-number] { text-transform: uppercase !important; }
+
+.approval-status-badge.approval-neutral{background:#f8fafc;color:#64748b;border:1px solid #cbd5e1;}

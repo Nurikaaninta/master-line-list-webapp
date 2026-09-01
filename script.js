@@ -34,7 +34,7 @@ const REVISION_OPTIONS = [
     { code: 'IFI', label: 'Issued for Information', format: '0, 1, 2, 3, ...; n', defaultNumber: '0', status: 'Issued for Information' }
 ];
 const REVISION_STORAGE_KEY = 'masterLineListRevisionState_v3_clean_0901';
-const APPROVAL_STORAGE_KEY = 'masterLineListApprovalState_v3_clean_0901';
+const APPROVAL_STORAGE_KEY = 'masterLineListApprovalState_v4_clean_0901';
 
 function loadApprovalState() {
     try { return JSON.parse(localStorage.getItem(APPROVAL_STORAGE_KEY) || '{}'); }
@@ -834,6 +834,25 @@ function getCompletedCycleApprovalInfo(proj, line, stage) {
     };
 }
 
+function recalculateLeadWorkflowStatus(bucket) {
+    if (!bucket) return;
+    // Status final hanya boleh dibuat oleh PM. Lead approval tidak pernah
+    // mengubah status menjadi Approved. Setelah KEDUA Lead selesai approve,
+    // status tunggal yang ditampilkan adalah Waiting Approval PM.
+    if (bucket.pmApproval === 'Approved') {
+        bucket.submissionStatus = 'Approved';
+        return;
+    }
+    if (bucket.processApproval === 'Approved' && bucket.pipingApproval === 'Approved') {
+        bucket.submissionStatus = 'Waiting Approval PM';
+        return;
+    }
+    if (bucket.processApproval === 'Approved' || bucket.pipingApproval === 'Approved') {
+        bucket.submissionStatus = 'Waiting Approval Lead & PM';
+        return;
+    }
+}
+
 function getApprovalDisplay(line, proj, stage) {
     const cycle = Number(proj?.currentCycle || 1);
     const bucket = getLineApprovalBucket(line, cycle);
@@ -844,8 +863,17 @@ function getApprovalDisplay(line, proj, stage) {
     const previous = getCompletedCycleApprovalInfo(proj, line, stage);
     const submitted = bucket?.submissionStatus === 'Waiting Approval Lead & PM' || bucket?.submissionStatus === 'Waiting Approval PM' || bucket?.submissionStatus === 'Approved';
     const bothLeadsApproved = bucket?.processApproval === 'Approved' && bucket?.pipingApproval === 'Approved';
-    const pmApproved = bucket?.pmApproval === 'Approved' || bucket?.submissionStatus === 'Approved';
+    // submissionStatus tidak boleh menjadi sumber final approval; hanya pmApproval.
+    const pmApproved = bucket?.pmApproval === 'Approved';
+    if (bothLeadsApproved && !pmApproved) {
+        bucket.submissionStatus = 'Waiting Approval PM';
+    }
+    const isProcessEngineer = currentUser?.role === 'Process Engineer';
 
+    // Satu line hanya boleh menampilkan SATU status utama.
+    // Status "Pending Approval (sementara)" hanya untuk Process Engineer
+    // pada data yang belum dikirim ke Lead. Role approval lain tidak melihat
+    // placeholder tersebut agar status tidak bertumpuk/menyesatkan.
     if (pmApproved) {
         return `<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
@@ -853,22 +881,40 @@ function getApprovalDisplay(line, proj, stage) {
         return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
     }
     if (submitted) {
+        // IMPORTANT: approval by either Lead must NOT finalize the line.
+        // Final "Approved Rev ..." is reserved for PM approval only.
+        // Until both Lead Process and Lead Piping have approved, keep the
+        // single visible status as "Waiting Approval Lead & PM".
+        if (currentStatus === 'Rejected') {
+            return `<span class="approval-status-badge approval-rejected">Rejected Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+        }
+        if (currentStatus === 'Deleted') {
+            return `<span class="approval-status-badge approval-deleted">Deleted Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+        }
         return `<span class="approval-status-badge approval-pending">Waiting Approval Lead &amp; PM</span>`;
     }
+
+    // Jika line baru mewarisi approval cycle sebelumnya, tampilkan histori saja.
+    // Jangan menambahkan "Pending Approval (sementara)" di bawahnya.
     if (previous && currentStatus === 'Pending') {
-        return `
-            <div class="approval-status-stack">
-                <span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>
-                <span class="approval-status-badge approval-pending approval-current-cycle">Pending Approval (sementara)</span>
-            </div>`;
+        return `<span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>`;
     }
+
     if (currentStatus === 'Rejected') {
         return `<span class="approval-status-badge approval-rejected">Rejected Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
     if (currentStatus === 'Deleted') {
         return `<span class="approval-status-badge approval-deleted">Deleted Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
-    return `<span class="approval-status-badge approval-pending">Pending Approval (sementara)</span>`;
+
+    // Hanya Process Engineer yang melihat status sementara sebelum Sent.
+    if (isProcessEngineer) {
+        return `<span class="approval-status-badge approval-pending">Pending Approval (sementara)</span>`;
+    }
+
+    // Untuk Lead Process, Lead Piping, dan PM, line yang belum dikirim
+    // ditampilkan sebagai belum dikirim agar tidak terlihat seperti pending approval.
+    return `<span class="approval-status-badge approval-neutral">Belum Dikirim Engineer</span>`;
 }
 
 function getApprovalSelectionStage() {
@@ -984,6 +1030,7 @@ function approveAllSelected(stage) {
         const bucket = getLineApprovalBucket(line, proj.currentCycle);
         if (stage === 'piping') bucket.pipingApproval = 'Approved';
         else bucket.processApproval = 'Approved';
+        recalculateLeadWorkflowStatus(bucket);
         syncCurrentCycleApproval(line, proj.currentCycle);
     });
 
@@ -1674,10 +1721,10 @@ function setApprovalStatus(index, status, stage = 'process') {
     } else {
         bucket.processApproval = status;
     }
-    if (status === 'Approved' && bucket.processApproval === 'Approved' && bucket.pipingApproval === 'Approved') {
-        bucket.submissionStatus = 'Waiting Approval PM';
-    } else if (status === 'Rejected') {
+    if (status === 'Rejected') {
         bucket.submissionStatus = 'Waiting Approval Lead & PM';
+    } else {
+        recalculateLeadWorkflowStatus(bucket);
     }
     syncCurrentCycleApproval(line, proj.currentCycle);
 
@@ -1703,7 +1750,17 @@ function setApprovalStatus(index, status, stage = 'process') {
     });
 
     const stageLabel = stage === 'piping' ? 'Piping Approval' : 'Process Approval';
-    showModal('Status Diperbarui', `${stageLabel} line ${index + 1} menjadi ${status}.`, status === 'Approved' ? 'success' : status === 'Rejected' ? 'warning' : 'info');
+    let modalMessage;
+    if (status === 'Approved') {
+        if (bucket.processApproval === 'Approved' && bucket.pipingApproval === 'Approved') {
+            modalMessage = `${stageLabel} line ${index + 1} sudah Approved oleh kedua Lead. Status Process Approval sekarang \"Waiting Approval PM\". PM harus melakukan approval final.`;
+        } else {
+            modalMessage = `${stageLabel} line ${index + 1} sudah Approved oleh ${stage === 'piping' ? 'Lead Piping' : 'Lead Process'}. Status Process Approval tetap \"Waiting Approval Lead & PM\" sampai kedua Lead selesai approve.`;
+        }
+    } else {
+        modalMessage = `${stageLabel} line ${index + 1} menjadi ${status}.`;
+    }
+    showModal('Status Diperbarui', modalMessage, status === 'Approved' ? 'success' : status === 'Rejected' ? 'warning' : 'info');
 }
 
 // Kompatibilitas untuk pemanggilan lama.
