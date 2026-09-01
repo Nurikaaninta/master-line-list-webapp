@@ -71,10 +71,11 @@ function saveApprovalState() {
             };
             (p.lines || []).forEach((line, index) => {
                 const id = String(line.id ?? index + 1);
-                const bucket = getLineApprovalBucket(line, p.currentCycle);
+                const currentBucket = getLineApprovalBucket(line, p.currentCycle);
                 state[p.id].lines[id] = {
-                    processApproval: bucket?.processApproval || line.processApproval || 'Pending',
-                    pipingApproval: bucket?.pipingApproval || line.pipingApproval || 'Pending'
+                    processApproval: currentBucket?.processApproval || line.processApproval || 'Pending',
+                    pipingApproval: currentBucket?.pipingApproval || line.pipingApproval || 'Pending',
+                    approvalsByCycle: JSON.parse(JSON.stringify(line.approvalsByCycle || {}))
                 };
             });
         });
@@ -91,6 +92,9 @@ function hydrateApprovalState() {
                 || saved[p.id]?.[String(line.id ?? index + 1)]
                 || {};
             if (!line.approvalsByCycle || typeof line.approvalsByCycle !== 'object') line.approvalsByCycle = {};
+            if (legacy.approvalsByCycle && typeof legacy.approvalsByCycle === 'object') {
+                line.approvalsByCycle = JSON.parse(JSON.stringify(legacy.approvalsByCycle));
+            }
             const bucket = getLineApprovalBucket(line, cycle);
             if (legacy.processApproval) bucket.processApproval = legacy.processApproval;
             if (legacy.pipingApproval) bucket.pipingApproval = legacy.pipingApproval;
@@ -748,6 +752,66 @@ function normalizeMultiValue(value) {
     return String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 }
 
+function getCompletedCycleApprovalInfo(proj, line, stage) {
+    const currentCycle = Number(proj?.currentCycle || 1);
+    if (currentCycle <= 1) return null;
+
+    const completedCycle = currentCycle - 1;
+    const history = (proj?.cycleHistory || []).find(h => Number(h.cycle) === completedCycle);
+    const bucket = line?.approvalsByCycle?.[String(completedCycle)];
+    const stageKey = stage === 'piping' ? 'pipingApproval' : 'processApproval';
+
+    // A line yang ditambahkan setelah cycle sebelumnya selesai tetap dianggap
+    // sudah melewati cycle tersebut. Histori final PM menjadi acuan label yang tampil.
+    const wasApproved = bucket?.[stageKey] === 'Approved' || history?.[stageKey] === 'Approved';
+    if (!wasApproved || !history) return null;
+
+    const revision = String(history.revision || '').toUpperCase();
+    // Setelah PM final approval, hasil cycle adalah IFU. Gunakan hasil final ini
+    // sebagai label histori agar tidak berubah saat cycle berikutnya dibuka.
+    const finalStatus = String(history.finalStatus || 'IFU').toUpperCase();
+    return {
+        cycle: completedCycle,
+        revision,
+        status: finalStatus,
+        label: `Approved Rev ${revision} ${finalStatus}`
+    };
+}
+
+function getApprovalDisplay(line, proj, stage) {
+    const currentStatus = stage === 'piping'
+        ? (line?.pipingApproval || 'Pending')
+        : (line?.processApproval || 'Pending');
+
+    const activeRule = getActiveCycleRule(proj);
+    const currentRevision = String(activeRule?.revision || proj?.revisionNumber || '').toUpperCase();
+    const currentStatusCode = String(activeRule?.status || proj?.revisionStatus || '').toUpperCase();
+    const previous = getCompletedCycleApprovalInfo(proj, line, stage);
+
+    if (previous && currentStatus === 'Pending') {
+        return `
+            <div class="approval-status-stack">
+                <span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>
+                <span class="approval-status-badge approval-pending approval-current-cycle">Pending Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>
+            </div>`;
+    }
+
+    if (currentStatus === 'Approved') {
+        const label = `Approved Rev ${currentRevision} ${currentStatusCode}`;
+        return `<span class="approval-status-badge approval-approved">${escapeHtml(label)}</span>`;
+    }
+
+    if (currentStatus === 'Rejected') {
+        return `<span class="approval-status-badge approval-rejected">Rejected Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+    }
+
+    if (currentStatus === 'Deleted') {
+        return `<span class="approval-status-badge approval-deleted">Deleted Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+    }
+
+    return `<span class="approval-status-badge approval-pending">Pending Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+}
+
 function getApprovalSelectionStage() {
     if (currentUser?.role === 'Project Manager') return 'manager';
     if (currentUser?.role === 'Lead Piping Engineer') return 'piping';
@@ -793,6 +857,90 @@ function toggleSelectAllApprovalRows(checked, stage) {
     });
 }
 
+function managerRequestRevisionSelected() {
+    const proj = projectsData[currentProjectIndex];
+    if (!proj) return;
+    if (!['Project Manager', 'System Administrator'].includes(currentUser?.role)) {
+        showModal('Akses Ditolak', 'Hanya Project Manager yang dapat meminta revisi.', 'warning');
+        return;
+    }
+
+    const set = approvalSelection.manager;
+    const selectedIndexes = Array.from(set || []).filter(index =>
+        Number.isInteger(index) && proj.lines[index] && checkRowAgainstFilters(proj.lines[index])
+    );
+
+    if (!selectedIndexes.length) {
+        showModal('Belum Ada Baris Dipilih', 'Pilih baris terlebih dahulu menggunakan checkbox "Semua" atau checkbox pada masing-masing baris.', 'warning');
+        return;
+    }
+
+    selectedIndexes.forEach(index => {
+        const line = proj.lines[index];
+        const bucket = getLineApprovalBucket(line, proj.currentCycle);
+        bucket.processApproval = 'Pending';
+        syncCurrentCycleApproval(line, proj.currentCycle);
+        line.pmRevisionRequested = true;
+    });
+
+    set.clear();
+    saveApprovalState();
+    renderDashboard();
+    requestAnimationFrame(() => scrollLineListToRightAnimated(true));
+
+    showModal(
+        'Need Revision',
+        `${selectedIndexes.length} baris ditandai Need Revision oleh Project Manager. Data tidak dihapus dan menunggu perbaikan Process Engineer.`,
+        'info'
+    );
+}
+
+function approveAllSelected(stage) {
+    const proj = projectsData[currentProjectIndex];
+    if (!proj) return;
+
+    const role = currentUser?.role;
+    const allowed = (stage === 'process' && role === 'Lead Process Engineer') ||
+                    (stage === 'piping' && role === 'Lead Piping Engineer') ||
+                    role === 'System Administrator';
+    if (!allowed) {
+        showModal('Akses Ditolak', 'Approve All hanya dapat dijalankan oleh Lead Process, Lead Piping, atau System Administrator.', 'warning');
+        return;
+    }
+
+    const set = approvalSelection[stage];
+    const selectedIndexes = Array.from(set || []).filter(index =>
+        Number.isInteger(index) &&
+        proj.lines[index] &&
+        checkRowAgainstFilters(proj.lines[index])
+    );
+
+    if (!selectedIndexes.length) {
+        showModal('Belum Ada Baris Dipilih', 'Pilih baris terlebih dahulu menggunakan checkbox "Semua" atau checkbox pada masing-masing baris.', 'warning');
+        return;
+    }
+
+    selectedIndexes.forEach(index => {
+        const line = proj.lines[index];
+        const bucket = getLineApprovalBucket(line, proj.currentCycle);
+        if (stage === 'piping') bucket.pipingApproval = 'Approved';
+        else bucket.processApproval = 'Approved';
+        syncCurrentCycleApproval(line, proj.currentCycle);
+    });
+
+    set.clear();
+    saveApprovalState();
+    renderDashboard();
+
+    requestAnimationFrame(() => scrollLineListToRightAnimated(true));
+
+    showModal(
+        'Approve All Berhasil',
+        `${selectedIndexes.length} baris berhasil di-approve oleh ${stage === 'piping' ? 'Lead Piping' : 'Lead Process'} pada Cycle ${proj.currentCycle} / Rev ${proj.revisionNumber}.`,
+        'success'
+    );
+}
+
 function updateApprovalSelectionHeader(stage) {
     const header = document.getElementById('thActionFilter');
     if (!header || !isApprovalSelectionRole()) return;
@@ -816,11 +964,25 @@ function renderTableRows(proj) {
     const actionFilterEl = document.getElementById('thActionFilter');
     const selectionStage = getApprovalSelectionStage();
     if (actionFilterEl) {
+        const canBulkApprove = selectionStage && ['Lead Process Engineer', 'Lead Piping Engineer', 'System Administrator'].includes(currentUser?.role);
+        const canBulkRevision = selectionStage === 'manager' && ['Project Manager', 'System Administrator'].includes(currentUser?.role);
         actionFilterEl.innerHTML = isApprovalSelectionRole() && selectionStage ? `
-            <label class="inline-flex items-center justify-center gap-1.5 cursor-pointer text-[9px] font-bold text-slate-600" title="Pilih semua baris yang sedang tampil">
-                <input id="selectAllApprovalRows" type="checkbox" class="h-4 w-4 accent-blue-600 cursor-pointer" onchange="toggleSelectAllApprovalRows(this.checked, '${selectionStage}')">
-                <span>Semua</span>
-            </label>` : '';
+            <div class="approval-header-tools">
+                <label class="approval-header-check" title="Pilih semua baris yang sedang tampil">
+                    <input id="selectAllApprovalRows" type="checkbox" class="h-4 w-4 accent-blue-600 cursor-pointer" onchange="toggleSelectAllApprovalRows(this.checked, '${selectionStage}')">
+                    <span>Semua</span>
+                </label>
+                ${canBulkApprove ? `
+                    <label class="approval-header-check approval-all-check" title="Approve seluruh baris yang sudah dipilih">
+                        <input id="approveAllRows" type="checkbox" class="h-4 w-4 accent-emerald-600 cursor-pointer" onchange="if(this.checked){ this.checked=false; approveAllSelected('${selectionStage}'); }">
+                        <span>Approve All</span>
+                    </label>` : ''}
+                ${canBulkRevision ? `
+                    <label class="approval-header-check approval-revision-check" title="Tandai seluruh baris yang sudah dipilih untuk revisi">
+                        <input id="needRevisionAllRows" type="checkbox" class="h-4 w-4 accent-rose-600 cursor-pointer" onchange="if(this.checked){ this.checked=false; managerRequestRevisionSelected(); }">
+                        <span>Need Revisi</span>
+                    </label>` : ''}
+            </div>` : '';
     }
 
     const isLeadProcessOnly = currentUser && currentUser.role === 'Lead Process Engineer';
@@ -956,12 +1118,7 @@ function renderTableRows(proj) {
             <td><input type="text" value="${escapeHtmlAttr(line.remarks)}" onchange="updateLineField(${index}, 'remarks', this.value)" ${!canEditRemarksRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs" title="${isLeadProcessOnly ? 'Lead Process Engineer hanya dapat mengubah Remarks' : ''}"></td>
             
             <td class="text-center bg-amber-50/40 approval-status-cell">
-                ${(() => {
-                    const status = approvalStage === 'piping' ? (line.pipingApproval || 'Pending') : (line.processApproval || 'Pending');
-                    // Jangan pernah render cell kosong; status default selalu Pending.
-                    const statusClass = status === 'Approved' ? 'approval-approved' : status === 'Rejected' ? 'approval-rejected' : status === 'Deleted' ? 'approval-deleted' : 'approval-pending';
-                    return `<span class="approval-status-badge ${statusClass}">${status}</span>`;
-                })()}
+                ${getApprovalDisplay(line, proj, approvalStage)}
             </td>
 
             <td class="text-center approval-action-cell">
@@ -1023,7 +1180,7 @@ function renderTableRows(proj) {
             }
         } else {
             if (managerApprovalStatusBadge) {
-                managerApprovalStatusBadge.textContent = 'READY FOR PM';
+                managerApprovalStatusBadge.textContent = 'Ready to Approval';
                 managerApprovalStatusBadge.className = 'manager-status-badge bg-emerald-50 text-emerald-700 border border-emerald-200';
             }
             if (managerApprovalText) managerApprovalText.textContent = `Rev ${revision} / ${docStatus}. Lead Process dan Lead Piping sudah Approved; menunggu Final Approval Project Manager.`;
@@ -1184,9 +1341,30 @@ function addLineRow() {
         stress_calc_no: "",
         remarks: "",
         processApproval: "Pending",
-        pipingApproval: "Pending"
+        pipingApproval: "Pending",
+        approvalsByCycle: {}
     });
 
+    // Jika project sudah masuk cycle berikutnya, baris baru mewarisi seluruh
+    // approval cycle yang telah selesai. Jadi baris baru tidak "mundur" menjadi
+    // Pending pada cycle sebelumnya.
+    const newLine = proj.lines[proj.lines.length - 1];
+    const activeCycle = Number(proj.currentCycle || 1);
+    const completedHistory = Array.isArray(proj.cycleHistory) ? proj.cycleHistory : [];
+    for (let cycle = 1; cycle < activeCycle; cycle++) {
+        const completed = completedHistory.find(h => Number(h.cycle) === cycle);
+        if (completed?.pmApproval === 'Approved' || completed?.finalStatus === 'IFU') {
+            newLine.approvalsByCycle[String(cycle)] = {
+                processApproval: 'Approved',
+                pipingApproval: 'Approved'
+            };
+        }
+    }
+
+    getLineApprovalBucket(newLine, activeCycle);
+    syncCurrentCycleApproval(newLine, activeCycle);
+
+    saveApprovalState();
     renderDashboard();
 
     // Setelah baris baru dibuat, langsung arahkan viewport tabel ke BARIS TERAKHIR.

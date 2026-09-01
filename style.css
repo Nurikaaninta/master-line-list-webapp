@@ -927,8 +927,8 @@ body {
     background: #ffffff;
 }
 .approval-status-cell {
-    min-width: 125px;
-    width: 125px;
+    min-width: 170px;
+    width: 170px;
     text-align: center;
     vertical-align: middle;
 }
@@ -967,6 +967,54 @@ body {
     background: #e2e8f0;
     color: #475569;
     border-color: #cbd5e1;
+}
+
+.approval-status-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 145px;
+}
+.approval-status-stack .approval-status-badge {
+    min-width: 0;
+    max-width: 180px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+}
+.approval-current-cycle {
+    font-size: 9px;
+    opacity: .9;
+}
+.approval-header-tools {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 72px;
+}
+.approval-header-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    white-space: nowrap;
+    font-size: 9px;
+    font-weight: 800;
+    color: #475569;
+    cursor: pointer;
+}
+.approval-header-check input {
+    margin: 0;
+}
+.approval-all-check {
+    color: #047857;
+}
+.approval-revision-check {
+    color: #be123c;
 }
 .approval-pending {
     background: #fef3c7;
