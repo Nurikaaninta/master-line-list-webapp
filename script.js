@@ -33,8 +33,8 @@ const REVISION_OPTIONS = [
     { code: 'ASB', label: 'As-Built', format: '1; 2; 3; ...; n', defaultNumber: '1', status: 'As-Built' },
     { code: 'IFI', label: 'Issued for Information', format: '0, 1, 2, 3, ...; n', defaultNumber: '0', status: 'Issued for Information' }
 ];
-const REVISION_STORAGE_KEY = 'masterLineListRevisionState_v1';
-const APPROVAL_STORAGE_KEY = 'masterLineListApprovalState_v1';
+const REVISION_STORAGE_KEY = 'masterLineListRevisionState_clean_test_v3';
+const APPROVAL_STORAGE_KEY = 'masterLineListApprovalState_clean_test_v3';
 
 function loadApprovalState() {
     try { return JSON.parse(localStorage.getItem(APPROVAL_STORAGE_KEY) || '{}'); }
@@ -135,13 +135,29 @@ function getCycleApprovalState(proj) {
     const lines = proj?.lines || [];
     const cycle = Number(proj?.currentCycle || 1);
     lines.forEach(line => syncCurrentCycleApproval(line, cycle));
-    const processApproved = lines.length > 0 && lines.every(l => (l.processApproval || 'Pending') === 'Approved');
-    const pipingApproved = lines.length > 0 && lines.every(l => (l.pipingApproval || 'Pending') === 'Approved');
+
+    // PM hanya memproses line yang sudah dikirim oleh Engineer.
+    // Line baru / masih Pending Approval (sementara) tidak menghalangi
+    // line yang sudah selesai dan disetujui kedua Lead.
+    const submittedLines = lines.filter(line =>
+        line?.submissionStatus === 'Waiting Approval Lead & PM' ||
+        line?.submissionStatus === 'Waiting Approval PM' ||
+        line?.submissionStatus === 'Approved for PM' ||
+        line?.processApproval === 'Approved' ||
+        line?.pipingApproval === 'Approved'
+    );
+
+    const processApproved = submittedLines.length > 0 &&
+        submittedLines.every(l => (l.processApproval || 'Pending') === 'Approved');
+    const pipingApproved = submittedLines.length > 0 &&
+        submittedLines.every(l => (l.pipingApproval || 'Pending') === 'Approved');
     const allApproved = processApproved && pipingApproved;
+
     const pmApproved = proj?.finalApproval?.role === 'Project Manager' &&
         proj?.finalApproval?.status === 'Approved' &&
         Number(proj?.finalApproval?.cycle) === cycle;
-    return { processApproved, pipingApproved, allApproved, pmApproved };
+
+    return { processApproved, pipingApproved, allApproved, pmApproved, submittedCount: submittedLines.length };
 }
 
 function getActiveCycleRule(proj) {
@@ -184,19 +200,24 @@ let projectsData = [
         revisionStatus: "IFC",
         revisionNumber: "0",
         documentStatus: "Issued for Construction",
+        cycleRules: defaultProjectRules(),
+        currentCycle: 1,
+        cycleHistory: [],
+        cycleSnapshots: [],
+        finalApproval: null,
         leftLogo: "",
         rightLogo: "",
         lines: [
-            { id: 1, size: "8", fluid_id: "CP", spec: "B1", seq: "190016", ins_type: "-", ins_thick: "-", complete_no: "8''-CP-B1-190016", pid: "B2401-190-A1501", from: "CPO Tank-1", to: "Inlet CPO Intertank Transfer Pump (190GM-1)", service: "CPO", phase: "Liquid", mass: "162360", vol: "180", press_op: "1.42", press_des: "5.33", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Medium", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 2, size: "4", fluid_id: "CP", spec: "B1", seq: "190011", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190011", pid: "B2401-190-A1501", from: "Empty Out Product CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 3, size: "4", fluid_id: "CP", spec: "B1", seq: "190012", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190012", pid: "B2401-190-A1501", from: "Drain CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 4, size: "4", fluid_id: "CP", spec: "B1", seq: "190013", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190013", pid: "B2401-190-A1501", from: "Overflow CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 5, size: "2", fluid_id: "CP", spec: "B1", seq: "190014", ins_type: "-", ins_thick: "-", complete_no: "2''-CP-B1-190014", pid: "B2401-190-A1501", from: "Sampling CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 6, size: "24", fluid_id: "VENT", spec: "B1", seq: "190015", ins_type: "-", ins_thick: "-", complete_no: "24''-VENT-B1-190015", pid: "B2401-190-A1501", from: "Flame Arrester CPO Tank-1 (190D-1)", to: "-", service: "Tank Vent", phase: "Gas", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "1.2", visc: "0.018", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 7, size: "8", fluid_id: "CP", spec: "B1", seq: "190017", ins_type: "-", ins_thick: "-", complete_no: "8''-CP-B1-190017", pid: "B2401-190-A1501", from: "Discharge CPO Intertank Transfer Pump (190GM-1)", to: "CPO Tank-2", service: "CPO", phase: "Liquid", mass: "162360", vol: "180", press_op: "5.33", press_des: "10.0", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "15.0", painting: "1F2CS", pwht: "No", stress_critical: "Medium", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 8, size: "3", fluid_id: "CP", spec: "B1", seq: "190018", ins_type: "-", ins_thick: "-", complete_no: "3''-CP-B1-190018", pid: "B2401-190-A1501", from: "CPO Intertank Transfer Pump (190GM-1)", to: "CPO Intertank Transfer Pump (190GM-1)", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "5.33", press_des: "10.0", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "15.0", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 9, size: "8", fluid_id: "CP", spec: "B1", seq: "190026", ins_type: "-", ins_thick: "-", complete_no: "8''-CP-B1-190026", pid: "B2401-190-A1501", from: "CPO Tank-2", to: "Inlet CPO Intertank Transfer Pump (190GM-1)", service: "CPO", phase: "Liquid", mass: "162360", vol: "180", press_op: "1.42", press_des: "5.33", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Medium", stress_calc_no: "-", remarks: "-", processApproval: "Approved" },
-            { id: 10, size: "4", fluid_id: "CP", spec: "B1", seq: "190021", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190021", pid: "B2401-190-A1501", from: "Empty Out Product CPO Tank-2 (190D-2)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Approved" }
+            { id: 1, size: "8", fluid_id: "CP", spec: "B1", seq: "190016", ins_type: "-", ins_thick: "-", complete_no: "8''-CP-B1-190016", pid: "B2401-190-A1501", from: "CPO Tank-1", to: "Inlet CPO Intertank Transfer Pump (190GM-1)", service: "CPO", phase: "Liquid", mass: "162360", vol: "180", press_op: "1.42", press_des: "5.33", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Medium", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 2, size: "4", fluid_id: "CP", spec: "B1", seq: "190011", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190011", pid: "B2401-190-A1501", from: "Empty Out Product CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 3, size: "4", fluid_id: "CP", spec: "B1", seq: "190012", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190012", pid: "B2401-190-A1501", from: "Drain CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 4, size: "4", fluid_id: "CP", spec: "B1", seq: "190013", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190013", pid: "B2401-190-A1501", from: "Overflow CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 5, size: "2", fluid_id: "CP", spec: "B1", seq: "190014", ins_type: "-", ins_thick: "-", complete_no: "2''-CP-B1-190014", pid: "B2401-190-A1501", from: "Sampling CPO Tank-1 (190D-1)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 6, size: "24", fluid_id: "VENT", spec: "B1", seq: "190015", ins_type: "-", ins_thick: "-", complete_no: "24''-VENT-B1-190015", pid: "B2401-190-A1501", from: "Flame Arrester CPO Tank-1 (190D-1)", to: "-", service: "Tank Vent", phase: "Gas", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "1.2", visc: "0.018", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 7, size: "8", fluid_id: "CP", spec: "B1", seq: "190017", ins_type: "-", ins_thick: "-", complete_no: "8''-CP-B1-190017", pid: "B2401-190-A1501", from: "Discharge CPO Intertank Transfer Pump (190GM-1)", to: "CPO Tank-2", service: "CPO", phase: "Liquid", mass: "162360", vol: "180", press_op: "5.33", press_des: "10.0", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "15.0", painting: "1F2CS", pwht: "No", stress_critical: "Medium", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 8, size: "3", fluid_id: "CP", spec: "B1", seq: "190018", ins_type: "-", ins_thick: "-", complete_no: "3''-CP-B1-190018", pid: "B2401-190-A1501", from: "CPO Intertank Transfer Pump (190GM-1)", to: "CPO Intertank Transfer Pump (190GM-1)", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "5.33", press_des: "10.0", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "15.0", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 9, size: "8", fluid_id: "CP", spec: "B1", seq: "190026", ins_type: "-", ins_thick: "-", complete_no: "8''-CP-B1-190026", pid: "B2401-190-A1501", from: "CPO Tank-2", to: "Inlet CPO Intertank Transfer Pump (190GM-1)", service: "CPO", phase: "Liquid", mass: "162360", vol: "180", press_op: "1.42", press_des: "5.33", temp_op: "50", temp_des: "90", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Medium", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 10, size: "4", fluid_id: "CP", spec: "B1", seq: "190021", ins_type: "-", ins_thick: "-", complete_no: "4''-CP-B1-190021", pid: "B2401-190-A1501", from: "Empty Out Product CPO Tank-2 (190D-2)", to: "-", service: "CPO", phase: "Liquid", mass: "Normally No Flow", vol: "Normally No Flow", press_op: "ATM", press_des: "5.33", temp_op: "AMB", temp_des: "50", density: "902.0", visc: "25.1", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.995", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" }
         ]
     },
     {
@@ -206,19 +227,24 @@ let projectsData = [
         revisionStatus: "IFR",
         revisionNumber: "A",
         documentStatus: "Issued for Review",
+        cycleRules: defaultProjectRules(),
+        currentCycle: 1,
+        cycleHistory: [],
+        cycleSnapshots: [],
+        finalApproval: null,
         leftLogo: "",
         rightLogo: "",
         lines: [
-            { id: 1, size: "2", fluid_id: "LS", spec: "B1", seq: "190303", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190303-IH-40", pid: "B2401-190-A1501", from: "LP Steam CPO Tank-1 (190D-1)", to: "Steam Trap-2 CPO Tank-1 (190D-1)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 2, size: "2", fluid_id: "CD", spec: "B1", seq: "190304", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190304-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-1 CPO Tank-1 (190D-1)", to: "Condensate CPO Tank-1 (190D-1)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 3, size: "2", fluid_id: "CD", spec: "B1", seq: "190305", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190305-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-2 CPO Tank-1 (190D-1)", to: "Condensate CPO Tank-1 (190D-1)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 4, size: "3", fluid_id: "CD", spec: "B1", seq: "190306", ins_type: "IH", ins_thick: "40", complete_no: "3''-CD-B1-190306-IH-40", pid: "B2401-190-A1501", from: "Condensate CPO Tank-1 (190D-1)", to: "Condensate Header", service: "Condensate", phase: "Liquid", mass: "728.42", vol: "0.773", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 5, size: "2", fluid_id: "LS", spec: "B1", seq: "190309", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190309-IH-40", pid: "B2401-190-A1501", from: "LP Steam Header", to: "LP Steam CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 6, size: "2", fluid_id: "LS", spec: "B1", seq: "190310", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190310-IH-40", pid: "B2401-190-A1501", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-1 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 7, size: "2", fluid_id: "LS", spec: "B1", seq: "190311", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190311-IH-40", pid: "B2401-190-A1501", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-2 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 8, size: "2", fluid_id: "CD", spec: "B1", seq: "190312", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190312-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-1 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 9, size: "2", fluid_id: "CD", spec: "B1", seq: "190313", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190313-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-2 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 10, size: "3", fluid_id: "CD", spec: "B1", seq: "190314", ins_type: "IH", ins_thick: "40", complete_no: "3''-CD-B1-190314-IH-40", pid: "B2401-190-A1501", from: "Condensate CPO Tank-2 (190D-2)", to: "Condensate Header", service: "Condensate", phase: "Liquid", mass: "728.42", vol: "0.773", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" }
+            { id: 1, size: "2", fluid_id: "LS", spec: "B1", seq: "190303", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190303-IH-40", pid: "B2401-190-A1501", from: "LP Steam CPO Tank-1 (190D-1)", to: "Steam Trap-2 CPO Tank-1 (190D-1)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 2, size: "2", fluid_id: "CD", spec: "B1", seq: "190304", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190304-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-1 CPO Tank-1 (190D-1)", to: "Condensate CPO Tank-1 (190D-1)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 3, size: "2", fluid_id: "CD", spec: "B1", seq: "190305", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190305-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-2 CPO Tank-1 (190D-1)", to: "Condensate CPO Tank-1 (190D-1)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 4, size: "3", fluid_id: "CD", spec: "B1", seq: "190306", ins_type: "IH", ins_thick: "40", complete_no: "3''-CD-B1-190306-IH-40", pid: "B2401-190-A1501", from: "Condensate CPO Tank-1 (190D-1)", to: "Condensate Header", service: "Condensate", phase: "Liquid", mass: "728.42", vol: "0.773", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 5, size: "2", fluid_id: "LS", spec: "B1", seq: "190309", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190309-IH-40", pid: "B2401-190-A1501", from: "LP Steam Header", to: "LP Steam CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 6, size: "2", fluid_id: "LS", spec: "B1", seq: "190310", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190310-IH-40", pid: "B2401-190-A1501", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-1 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 7, size: "2", fluid_id: "LS", spec: "B1", seq: "190311", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190311-IH-40", pid: "B2401-190-A1501", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-2 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 8, size: "2", fluid_id: "CD", spec: "B1", seq: "190312", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190312-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-1 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 9, size: "2", fluid_id: "CD", spec: "B1", seq: "190313", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190313-IH-40", pid: "B2401-190-A1501", from: "Steam Trap-2 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 10, size: "3", fluid_id: "CD", spec: "B1", seq: "190314", ins_type: "IH", ins_thick: "40", complete_no: "3''-CD-B1-190314-IH-40", pid: "B2401-190-A1501", from: "Condensate CPO Tank-2 (190D-2)", to: "Condensate Header", service: "Condensate", phase: "Liquid", mass: "728.42", vol: "0.773", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" }
         ]
     },
     {
@@ -228,16 +254,16 @@ let projectsData = [
         leftLogo: "",
         rightLogo: "",
         lines: [
-            { id: 1, size: "4", fluid_id: "LS", spec: "B1", seq: "140012", ins_type: "IH", ins_thick: "40", complete_no: "4''-LS-B1-140012-IH-40", pid: "B2401-190-A1502", from: "Tank Farm LP Steam Header", to: "-", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 2, size: "2", fluid_id: "LS", spec: "B1", seq: "190310", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190310-IH-40", pid: "B2401-190-A1502", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-1 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 3, size: "2", fluid_id: "LS", spec: "B1", seq: "190311", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190311-IH-40", pid: "B2401-190-A1502", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-2 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 4, size: "2", fluid_id: "CD", spec: "B1", seq: "190312", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190312-IH-40", pid: "B2401-190-A1502", from: "Steam Trap-1 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 5, size: "2", fluid_id: "CD", spec: "B1", seq: "190313", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190313-IH-40", pid: "B2401-190-A1502", from: "Steam Trap-2 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 6, size: "3", fluid_id: "CD", spec: "B1", seq: "190314", ins_type: "IH", ins_thick: "40", complete_no: "3''-CD-B1-190314-IH-40", pid: "B2401-190-A1502", from: "Condensate CPO Tank-2 (190D-2)", to: "Condensate Header", service: "Condensate", phase: "Liquid", mass: "728.42", vol: "0.773", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 7, size: "4", fluid_id: "LS", spec: "B1", seq: "190315", ins_type: "IH", ins_thick: "40", complete_no: "4''-LS-B1-190315-IH-40", pid: "B2401-190-A1502", from: "Header", to: "User", service: "Low Pressure Steam", phase: "Gas", mass: "500", vol: "150", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 8, size: "2", fluid_id: "CD", spec: "B1", seq: "190316", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190316-IH-40", pid: "B2401-190-A1502", from: "Trap", to: "Return", service: "Condensate", phase: "Liquid", mass: "200", vol: "0.2", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 9, size: "6", fluid_id: "PW", spec: "B1", seq: "190401", ins_type: "-", ins_thick: "-", complete_no: "6''-PW-B1-190401", pid: "B2401-190-A1502", from: "Utility Area", to: "Tank Farm", service: "Process Water", phase: "Liquid", mass: "1000", vol: "1.0", press_op: "3", press_des: "5", temp_op: "30", temp_des: "40", density: "1000", visc: "1.0", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.5", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" },
-            { id: 10, size: "2", fluid_id: "IA", spec: "B1", seq: "190402", ins_type: "-", ins_thick: "-", complete_no: "2''-IA-B1-190402", pid: "B2401-190-A1502", from: "Instrument Air Header", to: "Actuators", service: "Instrument Air", phase: "Gas", mass: "50", vol: "40", press_op: "7", press_des: "10", temp_op: "35", temp_des: "50", density: "1.2", visc: "0.018", nde_rt: "0.05", nde_pt: "0.05", test_med: "Air", test_press: "15", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending" }
+            { id: 1, size: "4", fluid_id: "LS", spec: "B1", seq: "140012", ins_type: "IH", ins_thick: "40", complete_no: "4''-LS-B1-140012-IH-40", pid: "B2401-190-A1502", from: "Tank Farm LP Steam Header", to: "-", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 2, size: "2", fluid_id: "LS", spec: "B1", seq: "190310", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190310-IH-40", pid: "B2401-190-A1502", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-1 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 3, size: "2", fluid_id: "LS", spec: "B1", seq: "190311", ins_type: "IH", ins_thick: "40", complete_no: "2''-LS-B1-190311-IH-40", pid: "B2401-190-A1502", from: "LP Steam CPO Tank-2 (190D-2)", to: "Steam Trap-2 CPO Tank-2 (190D-2)", service: "Low Pressure Steam", phase: "Gas", mass: "364.21", vol: "136.15", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 4, size: "2", fluid_id: "CD", spec: "B1", seq: "190312", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190312-IH-40", pid: "B2401-190-A1502", from: "Steam Trap-1 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 5, size: "2", fluid_id: "CD", spec: "B1", seq: "190313", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190313-IH-40", pid: "B2401-190-A1502", from: "Steam Trap-2 CPO Tank-2 (190D-2)", to: "Condensate CPO Tank-2 (190D-2)", service: "Condensate", phase: "Liquid", mass: "364.21", vol: "0.386", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 6, size: "3", fluid_id: "CD", spec: "B1", seq: "190314", ins_type: "IH", ins_thick: "40", complete_no: "3''-CD-B1-190314-IH-40", pid: "B2401-190-A1502", from: "Condensate CPO Tank-2 (190D-2)", to: "Condensate Header", service: "Condensate", phase: "Liquid", mass: "728.42", vol: "0.773", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 7, size: "4", fluid_id: "LS", spec: "B1", seq: "190315", ins_type: "IH", ins_thick: "40", complete_no: "4''-LS-B1-190315-IH-40", pid: "B2401-190-A1502", from: "Header", to: "User", service: "Low Pressure Steam", phase: "Gas", mass: "500", vol: "150", press_op: "4", press_des: "6", temp_op: "151.94", temp_des: "164.96", density: "2.675", visc: "0.0149", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "9", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 8, size: "2", fluid_id: "CD", spec: "B1", seq: "190316", ins_type: "IH", ins_thick: "40", complete_no: "2''-CD-B1-190316-IH-40", pid: "B2401-190-A1502", from: "Trap", to: "Return", service: "Condensate", phase: "Liquid", mass: "200", vol: "0.2", press_op: "1", press_des: "4.5", temp_op: "120.4", temp_des: "155.47", density: "942.2", visc: "0.229", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "6.75", painting: "1F4CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 9, size: "6", fluid_id: "PW", spec: "B1", seq: "190401", ins_type: "-", ins_thick: "-", complete_no: "6''-PW-B1-190401", pid: "B2401-190-A1502", from: "Utility Area", to: "Tank Farm", service: "Process Water", phase: "Liquid", mass: "1000", vol: "1.0", press_op: "3", press_des: "5", temp_op: "30", temp_des: "40", density: "1000", visc: "1.0", nde_rt: "0.05", nde_pt: "0.05", test_med: "Hydro", test_press: "7.5", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" },
+            { id: 10, size: "2", fluid_id: "IA", spec: "B1", seq: "190402", ins_type: "-", ins_thick: "-", complete_no: "2''-IA-B1-190402", pid: "B2401-190-A1502", from: "Instrument Air Header", to: "Actuators", service: "Instrument Air", phase: "Gas", mass: "50", vol: "40", press_op: "7", press_des: "10", temp_op: "35", temp_des: "50", density: "1.2", visc: "0.018", nde_rt: "0.05", nde_pt: "0.05", test_med: "Air", test_press: "15", painting: "1F2CS", pwht: "No", stress_critical: "Low", stress_calc_no: "-", remarks: "-", processApproval: "Pending", pipingApproval: "Pending" }
         ]
     }
 ];
@@ -381,15 +407,26 @@ function setupUserInterfaceByRole() {
     // Lead Process/Lead Piping berfungsi sebagai approver. Lead Process tetap
     // dapat mengubah Remarks; keduanya tidak menambah/import/menghapus line.
     const isLeadProcessOnly = ['Lead Process Engineer', 'Lead Piping Engineer'].includes(currentUser.role);
+    const isProjectManager = currentUser.role === 'Project Manager';
     const addBtn = document.getElementById('addNewRowBtn');
     const importBtn = document.getElementById('importExcelAction');
+    const importTopBtn = document.getElementById('importExcelTopAction');
 
     if (addBtn) {
         addBtn.classList.toggle('hidden', isLeadProcessOnly);
         addBtn.disabled = isLeadProcessOnly;
     }
+
+    // Project Manager tidak diperbolehkan melakukan Import Excel.
+    // Tombol import disembunyikan baik di header maupun di footer.
     if (importBtn) {
-        importBtn.classList.toggle('hidden', isLeadProcessOnly);
+        const hideImport = isLeadProcessOnly || isProjectManager;
+        importBtn.classList.toggle('hidden', hideImport);
+        importBtn.style.display = hideImport ? 'none' : '';
+    }
+    if (importTopBtn) {
+        importTopBtn.classList.toggle('hidden', isProjectManager);
+        importTopBtn.style.display = isProjectManager ? 'none' : '';
     }
 }
 
@@ -426,7 +463,7 @@ function renderDashboard() {
     document.getElementById('breadcrumbProject').innerText = proj.name;
     document.getElementById('headerProjectName').value = proj.name;
     proj.docNumber = String(proj.docNumber || '').trim().toUpperCase();
-    document.getElementById('headerDocNumber').value = proj.docNumber.replace(/\s*-\s*/g, ' - ');
+    document.getElementById('headerDocNumber').value = String(proj.docNumber || '').replace(/\s+/g, '');
     const sidebarActive = document.getElementById('activeProjectText');
     if (sidebarActive) sidebarActive.innerText = proj.name;
     if (typeof initProjectNameMarquee === 'function') initProjectNameMarquee();
@@ -788,11 +825,19 @@ function getApprovalDisplay(line, proj, stage) {
     const currentStatusCode = String(activeRule?.status || proj?.revisionStatus || '').toUpperCase();
     const previous = getCompletedCycleApprovalInfo(proj, line, stage);
 
+    if (line?.submissionStatus === 'Waiting Approval Lead & PM') {
+        return `<span class="approval-status-badge approval-pending">Waiting Approval Lead &amp; PM</span>`;
+    }
+
+    if (line?.submissionStatus === 'Waiting Approval PM') {
+        return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
+    }
+
     if (previous && currentStatus === 'Pending') {
         return `
             <div class="approval-status-stack">
                 <span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>
-                <span class="approval-status-badge approval-pending approval-current-cycle">Pending Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>
+                <span class="approval-status-badge approval-pending approval-current-cycle">Pending Approval (sementara)</span>
             </div>`;
     }
 
@@ -809,7 +854,7 @@ function getApprovalDisplay(line, proj, stage) {
         return `<span class="approval-status-badge approval-deleted">Deleted Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
 
-    return `<span class="approval-status-badge approval-pending">Pending Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+    return `<span class="approval-status-badge approval-pending">Pending Approval (sementara)</span>`;
 }
 
 function getApprovalSelectionStage() {
@@ -1019,7 +1064,12 @@ function renderTableRows(proj) {
         if (!['Pending', 'Approved', 'Rejected', 'Deleted'].includes(line.pipingApproval)) line.pipingApproval = 'Pending';
         const currentStatus = approvalStage === 'piping' ? line.pipingApproval : line.processApproval;
         const rowInEditMode = !!workflowEditState[approvalStage]?.[index];
-        const canEditRow = !!canEdit && (currentStatus === 'Pending' || rowInEditMode);
+        const canEditRow = !!canEdit && (
+            rowInEditMode ||
+            (currentStatus === 'Pending' &&
+             line.submissionStatus !== 'Waiting Approval Lead & PM' &&
+             line.submissionStatus !== 'Waiting Approval PM')
+        );
         const canEditRemarksRow = canEditRow || !!isLeadProcessOnly;
         const normalizedSeq = String(line.seq ?? '').replace(/\D/g, '').trim();
         const isDuplicateSeq = index === duplicateSeqIndex && !!normalizedSeq && seqCounts[normalizedSeq] > 1;
@@ -1060,8 +1110,23 @@ function renderTableRows(proj) {
                     <div class="approval-actions engineer-revision-actions">
                         <button type="button" onclick="startWorkflowEdit(${index}, '${approvalStage}')" class="revision-edit-btn" title="Edit data untuk revisi"><i class="fa-solid fa-pen-to-square"></i> Edit Data</button>
                     </div>`;
+            } else if (line.submissionStatus === 'Waiting Approval Lead & PM' || line.submissionStatus === 'Waiting Approval PM') {
+                actionHtml = `
+                    <div class="approval-actions engineer-submit-actions">
+                        <button type="button" disabled class="revision-submit-btn opacity-60 cursor-not-allowed" title="Data sudah dikirim dan sedang diproses">
+                            <i class="fa-solid fa-paper-plane"></i> Sent
+                        </button>
+                    </div>`;
             } else {
-                actionHtml = `<button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris"><i class="fa-solid fa-trash"></i></button>`;
+                actionHtml = `
+                    <div class="approval-actions engineer-submit-actions">
+                        <button type="button" onclick="sendLineToLead(${index}, '${approvalStage}')" class="revision-submit-btn" title="Kirim data ke Lead">
+                            <i class="fa-solid fa-paper-plane"></i> Sent
+                        </button>
+                        <button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>`;
             }
         }
 
@@ -1517,6 +1582,7 @@ function resubmitWorkflowEdit(index, stage) {
     } else {
         bucket.pipingApproval = 'Pending';
     }
+    line.submissionStatus = 'Waiting Approval Lead & PM';
     syncCurrentCycleApproval(line, proj.currentCycle);
     delete workflowEditState[stage][index];
     saveApprovalState();
@@ -1528,6 +1594,40 @@ function resubmitWorkflowEdit(index, stage) {
     scrollLineListToRightAnimated(true);
 
     showModal('Berhasil Dikirim Ulang', `Line ${index + 1} sudah diperbaiki dan dikirim kembali ke Lead ${stage === 'process' ? 'Process' : 'Piping'} untuk pemeriksaan ulang.`, 'success');
+}
+
+function sendLineToLead(index, stage = 'process') {
+    const expectedRole = stage === 'process' ? 'Process Engineer' : 'Piping Engineer';
+    if (currentUser?.role !== expectedRole && currentUser?.role !== 'System Administrator') {
+        showModal('Akses Ditolak', `Hanya ${expectedRole} yang dapat mengirim data ke Lead.`, 'warning');
+        return;
+    }
+
+    const proj = projectsData[currentProjectIndex];
+    const line = proj?.lines?.[index];
+    if (!line) return;
+
+    const seq = String(line.seq ?? '').replace(/\D/g, '').trim();
+    if (!seq) {
+        showModal('Data Belum Lengkap', 'Seq. No. wajib diisi sebelum data dikirim ke Lead.', 'warning');
+        return;
+    }
+
+    line.submissionStatus = 'Waiting Approval Lead & PM';
+    const bucket = getLineApprovalBucket(line, proj.currentCycle);
+    if (stage === 'process') bucket.processApproval = 'Pending';
+    if (stage === 'piping') bucket.pipingApproval = 'Pending';
+
+    syncCurrentCycleApproval(line, proj.currentCycle);
+    saveApprovalState();
+    renderDashboard();
+    requestAnimationFrame(() => scrollLineListToRightAnimated(true));
+
+    showModal(
+        'Data Terkirim',
+        `Line ${index + 1} berhasil dikirim ke Lead. Status berubah menjadi "Waiting Approval Lead & PM".`,
+        'success'
+    );
 }
 
 function deleteLineRow(index) {
@@ -1560,6 +1660,12 @@ function setApprovalStatus(index, status, stage = 'process') {
         bucket.pipingApproval = status;
     } else {
         bucket.processApproval = status;
+    }
+
+    if (status === 'Approved') {
+        line.submissionStatus = 'Waiting Approval PM';
+    } else if (status === 'Rejected') {
+        line.submissionStatus = 'Pending';
     }
     syncCurrentCycleApproval(line, proj.currentCycle);
 
@@ -1818,6 +1924,14 @@ function exportToExcel() {
 }
 
 function handleExcelImport(e) {
+    // Pengamanan tambahan: PM tidak boleh mengimpor Excel
+    // meskipun fungsi dipanggil secara programatik.
+    if (currentUser && currentUser.role === 'Project Manager') {
+        e.target.value = '';
+        showModal('Akses Ditolak', 'Project Manager tidak memiliki akses untuk Import Excel.', 'warning');
+        return;
+    }
+
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -2437,7 +2551,10 @@ function openEditProjectRulesModal(projectIndex = currentProjectIndex) {
     const docInput = document.getElementById('newProjectDocNumberInput');
     // Saat Edit Setting Rule, nama project ikut dapat diubah. Nomor document tetap menjadi identitas project.
     if (nameInput) { nameInput.value = String(proj.name || '').toUpperCase(); nameInput.closest('div')?.classList.remove('hidden'); }
-    if (docInput) { docInput.value = String(proj.docNumber || ''); docInput.closest('div')?.classList.add('hidden'); }
+    if (docInput) {
+        docInput.value = String(proj.docNumber || '').replace(/\s+/g, '');
+        docInput.closest('div')?.classList.remove('hidden');
+    }
     renderProjectRuleRows(proj.cycleRules || defaultProjectRules(), { editMode: true, currentCycle: Number(proj.currentCycle || 1) });
     const saveBtn = modal.querySelector('button[onclick="saveNewProject()"]');
     if (saveBtn) { saveBtn.textContent = 'Simpan Setting Rule'; saveBtn.setAttribute('onclick', 'saveEditedProjectRules()'); }
@@ -2458,6 +2575,23 @@ function saveEditedProjectRules() {
         nameInput?.focus();
         return;
     }
+    const docInput = document.getElementById('newProjectDocNumberInput');
+    const newDocNumber = String(docInput?.value || '').toUpperCase().replace(/\s+/g, '').trim();
+    if (!newDocNumber) {
+        showModal('Peringatan', 'Nomor document tidak boleh kosong.', 'warning');
+        docInput?.focus();
+        return;
+    }
+    const duplicateDoc = projectsData.some((p, i) =>
+        i !== idx &&
+        String(p.docNumber || '').replace(/\s+/g, '').toUpperCase() === newDocNumber
+    );
+    if (duplicateDoc) {
+        showModal('Nomor Document Sudah Ada', `Nomor document "${newDocNumber}" sudah digunakan oleh project lain.`, 'warning');
+        docInput?.focus();
+        return;
+    }
+
     const duplicateName = projectsData.some((p, i) => i !== idx && String(p.name || '').trim().toUpperCase() === newName);
     if (duplicateName) {
         showModal('Nama Project Sudah Ada', `Project "${newName}" sudah digunakan. Gunakan nama project yang berbeda.`, 'warning');
@@ -2481,6 +2615,7 @@ function saveEditedProjectRules() {
         return;
     }
     proj.name = newName;
+    proj.docNumber = newDocNumber;
     proj.cycleRules = normalizeProjectRules(rules);
     const activeRule = getActiveCycleRule(proj);
     if (activeRule) {
@@ -2515,8 +2650,8 @@ function saveNewProject() {
         showModal('Project Sudah Ada', `Project "${name}" sudah ada. Project baru tidak dibuat agar data tidak tertimpa.`, 'warning');
         return;
     }
-    const normalizedDocNumber = docNumber.toUpperCase().replace(/\s+/g, ' ').trim();
-    const duplicateDoc = projectsData.some(p => String(p.docNumber || '').toLowerCase().replace(/\s+/g, ' ').trim() === normalizedDocNumber);
+    const normalizedDocNumber = docNumber.toUpperCase().replace(/\s+/g, '').trim();
+    const duplicateDoc = projectsData.some(p => String(p.docNumber || '').toLowerCase().replace(/\s+/g, '').trim() === normalizedDocNumber.toLowerCase());
     if (duplicateDoc) {
         showModal('Nomor Document Sudah Ada', `Nomor document "${docNumber}" sudah digunakan oleh project lain. Gunakan nomor document yang berbeda.`, 'warning');
         return;
@@ -2525,7 +2660,7 @@ function saveNewProject() {
     const newProj = {
         id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: name,
-        docNumber: docNumber,
+        docNumber: normalizedDocNumber,
         leftLogo: "",
         rightLogo: "",
         lines: [],
@@ -2545,7 +2680,7 @@ function saveNewProject() {
     saveApprovalState();
     closeAddProjectModal();
     renderDashboard();
-    showModal("Berhasil", `Project "${name}" berhasil ditambahkan dengan Document No. ${docNumber}. Cycle 1 / Revisi ${rules[0].revision} / ${getRevisionOption(rules[0].status).label} aktif.`, "success");
+    showModal("Berhasil", `Project "${name}" berhasil ditambahkan dengan Document No. ${normalizedDocNumber}. Cycle 1 / Revisi ${rules[0].revision} / ${getRevisionOption(rules[0].status).label} aktif.`, "success");
 }
 
 // ==========================================
