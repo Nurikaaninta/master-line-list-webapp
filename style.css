@@ -60,7 +60,7 @@ body {
 .excel-table col.c-stress-calc { width: 190px; }
 .excel-table col.c-remarks { width: 180px; }
 .excel-table col.c-approval { width: 135px; }
-.excel-table col.c-action  { width: 70px; }
+.excel-table col.c-action  { width: 115px; }
 
 .excel-table th,
 .excel-table td {

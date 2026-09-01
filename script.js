@@ -18,6 +18,8 @@ let currentUser = null;
 // Mode revisi per line. Hanya line yang sudah mendapat keputusan yang dapat
 // dibuka kembali oleh Engineer melalui tombol Edit Data.
 const workflowEditState = { process: {}, piping: {} };
+// Baris yang dipilih untuk kebutuhan batch/action oleh Lead Process, Lead Piping, dan PM.
+const approvalSelection = { process: new Set(), piping: new Set(), manager: new Set() };
 let editingProjectRulesIndex = null;
 
 // Status/revisi dokumen mengikuti matriks revision pada prosedur engineering.
@@ -326,6 +328,17 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('customModal').classList.add('hidden');
         });
     }
+
+    // Modal informasi dapat ditutup cepat dengan Enter atau Space, seperti menekan OK.
+    document.addEventListener('keydown', (event) => {
+        const modal = document.getElementById('customModal');
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
+            event.preventDefault();
+            event.stopPropagation();
+            document.getElementById('customModalClose')?.click();
+        }
+    });
 });
 
 // Logout kembali ke halaman login utama tanpa userDashboardHub
@@ -735,6 +748,62 @@ function normalizeMultiValue(value) {
     return String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 }
 
+function getApprovalSelectionStage() {
+    if (currentUser?.role === 'Project Manager') return 'manager';
+    if (currentUser?.role === 'Lead Piping Engineer') return 'piping';
+    if (currentUser?.role === 'Lead Process Engineer') return 'process';
+    return null;
+}
+
+function isApprovalSelectionRole() {
+    return ['Lead Process Engineer', 'Lead Piping Engineer', 'Project Manager'].includes(currentUser?.role);
+}
+
+function toggleApprovalRowSelection(index, checked, stage) {
+    const set = approvalSelection[stage];
+    if (!set) return;
+    if (checked) set.add(Number(index));
+    else set.delete(Number(index));
+    updateApprovalSelectionHeader(stage);
+}
+
+function toggleSelectAllApprovalRows(checked, stage) {
+    const proj = projectsData[currentProjectIndex];
+    const set = approvalSelection[stage];
+    if (!proj || !set) return;
+
+    // Pilih / batalkan semua baris yang sedang tampil.
+    // Kedua kondisi (dicentang maupun dilepas) tetap memicu perpindahan
+    // horizontal ke kolom paling kanan sesuai kebutuhan workflow approval.
+    proj.lines.forEach((line, index) => {
+        if (checkRowAgainstFilters(line)) {
+            if (checked) set.add(index);
+            else set.delete(index);
+        }
+    });
+
+    renderTableRows(proj);
+
+    // renderTableRows sengaja mengembalikan posisi tabel ke kiri agar frozen
+    // columns tetap terlihat. Setelah render selesai, jika checkbox "Semua"
+    // ditekan, arahkan user otomatis ke sisi kanan untuk melihat Aksi.
+    // Berlaku juga saat checkbox dilepas.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollLineListToRightAnimated(true));
+    });
+}
+
+function updateApprovalSelectionHeader(stage) {
+    const header = document.getElementById('thActionFilter');
+    if (!header || !isApprovalSelectionRole()) return;
+    const proj = projectsData[currentProjectIndex];
+    const set = approvalSelection[stage];
+    const visibleIndexes = (proj?.lines || []).map((line, index) => checkRowAgainstFilters(line) ? index : -1).filter(i => i >= 0);
+    const allSelected = visibleIndexes.length > 0 && visibleIndexes.every(i => set.has(i));
+    const checkbox = document.getElementById('selectAllApprovalRows');
+    if (checkbox) checkbox.checked = allSelected;
+}
+
 function renderTableRows(proj) {
     const tbody = document.getElementById('lineTableBody');
     tbody.innerHTML = '';
@@ -742,6 +811,16 @@ function renderTableRows(proj) {
     const approvalHeaderEl = document.getElementById('thProcessApproval');
     if (approvalHeaderEl) {
         approvalHeaderEl.textContent = 'Process Approval';
+    }
+
+    const actionFilterEl = document.getElementById('thActionFilter');
+    const selectionStage = getApprovalSelectionStage();
+    if (actionFilterEl) {
+        actionFilterEl.innerHTML = isApprovalSelectionRole() && selectionStage ? `
+            <label class="inline-flex items-center justify-center gap-1.5 cursor-pointer text-[9px] font-bold text-slate-600" title="Pilih semua baris yang sedang tampil">
+                <input id="selectAllApprovalRows" type="checkbox" class="h-4 w-4 accent-blue-600 cursor-pointer" onchange="toggleSelectAllApprovalRows(this.checked, '${selectionStage}')">
+                <span>Semua</span>
+            </label>` : '';
     }
 
     const isLeadProcessOnly = currentUser && currentUser.role === 'Lead Process Engineer';
@@ -886,7 +965,10 @@ function renderTableRows(proj) {
             </td>
 
             <td class="text-center approval-action-cell">
-                ${actionHtml}
+                <div class="flex items-center justify-center gap-1.5">
+                    ${isApprovalSelectionRole() ? `<input type="checkbox" class="approval-row-select h-4 w-4 accent-blue-600 cursor-pointer" ${approvalSelection[getApprovalSelectionStage()]?.has(index) ? 'checked' : ''} onchange="toggleApprovalRowSelection(${index}, this.checked, '${getApprovalSelectionStage()}')" title="Pilih baris ${index + 1}" aria-label="Pilih baris ${index + 1}">` : ''}
+                    ${actionHtml}
+                </div>
             </td>
         `;
         tbody.appendChild(tr);
@@ -895,6 +977,7 @@ function renderTableRows(proj) {
     // Reset horizontal position after re-render so the full frozen area is visible from the left.
     const lineListScroll = document.querySelector(".line-list-scroll");
     if (lineListScroll) lineListScroll.scrollLeft = 0;
+    if (selectionStage) updateApprovalSelectionHeader(selectionStage);
 
     const managerArea = document.getElementById('managerApprovalArea');
     const managerApprovalText = document.getElementById('managerApprovalText');
@@ -2174,7 +2257,8 @@ function openEditProjectRulesModal(projectIndex = currentProjectIndex) {
     if (title) title.innerHTML = '<i class="fa-solid fa-sliders text-emerald-600"></i> Edit Setting Rule Cycle';
     const nameInput = document.getElementById('newProjectNameInput');
     const docInput = document.getElementById('newProjectDocNumberInput');
-    if (nameInput) { nameInput.value = String(proj.name || '').toUpperCase(); nameInput.closest('div')?.classList.add('hidden'); }
+    // Saat Edit Setting Rule, nama project ikut dapat diubah. Nomor document tetap menjadi identitas project.
+    if (nameInput) { nameInput.value = String(proj.name || '').toUpperCase(); nameInput.closest('div')?.classList.remove('hidden'); }
     if (docInput) { docInput.value = String(proj.docNumber || ''); docInput.closest('div')?.classList.add('hidden'); }
     renderProjectRuleRows(proj.cycleRules || defaultProjectRules(), { editMode: true, currentCycle: Number(proj.currentCycle || 1) });
     const saveBtn = modal.querySelector('button[onclick="saveNewProject()"]');
@@ -2188,6 +2272,21 @@ function saveEditedProjectRules() {
     if (!proj) return;
     const rules = collectProjectRules();
     if (!rules) return;
+
+    const nameInput = document.getElementById('newProjectNameInput');
+    const newName = String(nameInput?.value || '').trim().toUpperCase();
+    if (!newName) {
+        showModal('Peringatan', 'Nama project tidak boleh kosong.', 'warning');
+        nameInput?.focus();
+        return;
+    }
+    const duplicateName = projectsData.some((p, i) => i !== idx && String(p.name || '').trim().toUpperCase() === newName);
+    if (duplicateName) {
+        showModal('Nama Project Sudah Ada', `Project "${newName}" sudah digunakan. Gunakan nama project yang berbeda.`, 'warning');
+        nameInput?.focus();
+        return;
+    }
+
     const current = Number(proj.currentCycle || 1);
     const historyCount = Array.isArray(proj.cycleHistory) ? proj.cycleHistory.length : 0;
     if (historyCount > 0) {
@@ -2203,6 +2302,7 @@ function saveEditedProjectRules() {
         showModal('Setting Rule Tidak Valid', `Jumlah cycle tidak boleh kurang dari Cycle ${current} yang sedang aktif.`, 'warning');
         return;
     }
+    proj.name = newName;
     proj.cycleRules = normalizeProjectRules(rules);
     const activeRule = getActiveCycleRule(proj);
     if (activeRule) {
