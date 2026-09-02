@@ -50,12 +50,25 @@ function getLineApprovalBucket(line, cycle) {
             processApproval: 'Pending',
             pipingApproval: 'Pending',
             pmApproval: 'Pending',
-            submissionStatus: line.submissionStatus || 'Pending Approval (sementara)'
+            submissionStatus: line.submissionStatus || 'Draft',
+            submitted: line.submitted === true,
+            submittedAt: line.submittedAt || null
         };
     } else {
         const bucket = line.approvalsByCycle[key];
         if (!bucket.pmApproval) bucket.pmApproval = 'Pending';
-        if (!bucket.submissionStatus) bucket.submissionStatus = line.submissionStatus || 'Pending Approval (sementara)';
+        if (!bucket.submissionStatus) bucket.submissionStatus = line.submissionStatus || 'Draft';
+        if (typeof bucket.submitted !== 'boolean') bucket.submitted = line.submitted === true;
+        if (!bucket.submittedAt && line.submittedAt) bucket.submittedAt = line.submittedAt;
+        // Data lama yang masih Pending/Pending/Pending dan belum memiliki
+        // penanda pengiriman harus kembali menjadi Draft. Process Approval
+        // tidak boleh muncul sebelum Engineer menekan Sent.
+        if (bucket.submitted !== true && !bucket.submittedAt &&
+            bucket.processApproval === 'Pending' &&
+            bucket.pipingApproval === 'Pending' &&
+            bucket.pmApproval === 'Pending') {
+            bucket.submissionStatus = 'Draft';
+        }
     }
     return line.approvalsByCycle[key];
 }
@@ -84,7 +97,9 @@ function saveApprovalState() {
                     processApproval: currentBucket?.processApproval || line.processApproval || 'Pending',
                     pipingApproval: currentBucket?.pipingApproval || line.pipingApproval || 'Pending',
                     pmApproval: currentBucket?.pmApproval || line.pmApproval || 'Pending',
-                    submissionStatus: currentBucket?.submissionStatus || line.submissionStatus || 'Pending Approval (sementara)',
+                    submissionStatus: currentBucket?.submissionStatus || line.submissionStatus || 'Draft',
+                    submitted: currentBucket?.submitted === true,
+                    submittedAt: currentBucket?.submittedAt || null,
                     approvalsByCycle: JSON.parse(JSON.stringify(line.approvalsByCycle || {}))
                 };
             });
@@ -109,6 +124,8 @@ function hydrateApprovalState() {
             if (legacy.processApproval) bucket.processApproval = legacy.processApproval;
             if (legacy.pipingApproval) bucket.pipingApproval = legacy.pipingApproval;
             if (legacy.pmApproval) bucket.pmApproval = legacy.pmApproval;
+            if (typeof legacy.submitted === 'boolean') bucket.submitted = legacy.submitted;
+            if (legacy.submittedAt) bucket.submittedAt = legacy.submittedAt;
             if (legacy.submissionStatus) bucket.submissionStatus = legacy.submissionStatus;
             syncCurrentCycleApproval(line, cycle);
         });
@@ -160,7 +177,7 @@ function getCycleApprovalState(proj) {
     const processApproved = submittedLines.length > 0 && submittedLines.every(l => (l.processApproval || 'Pending') === 'Approved');
     const pipingApproved = submittedLines.length > 0 && submittedLines.every(l => (l.pipingApproval || 'Pending') === 'Approved');
     const allApproved = processApproved && pipingApproved;
-    const pmLinesApproved = submittedLines.length > 0 && submittedLines.every(l => (l.pmApproval || 'Pending') === 'Approved');
+    const pmLinesApproved = submittedLines.length > 0 && submittedLines.every(l => ['Ready for Final Approval', 'Approved'].includes(l.pmApproval || 'Pending'));
     const pmApproved = proj?.finalApproval?.role === 'Project Manager' &&
         proj?.finalApproval?.status === 'Approved' &&
         Number(proj?.finalApproval?.cycle) === cycle;
@@ -169,14 +186,29 @@ function getCycleApprovalState(proj) {
 
 function getActiveCycleRule(proj) {
     if (!proj || !Array.isArray(proj.cycleRules) || !proj.cycleRules.length) return null;
-    return proj.cycleRules[Math.max(0, Number(proj.currentCycle || 1) - 1)] || null;
+    const cycle = Math.max(1, Number(proj.currentCycle || 1));
+    return proj.cycleRules[cycle - 1] || null;
+}
+
+// SETTING RULE adalah sumber kebenaran untuk label REV/STATUS setiap project.
+// Tidak boleh ada workflow approval yang meng-hard-code IFC/IFR/IFA atau revisi
+// tertentu. Jika project memiliki cycleRules, seluruh label harus mengambil
+// revision dan status dari rule cycle yang sedang aktif.
+function getConfiguredCycleDisplay(proj) {
+    const rule = getActiveCycleRule(proj);
+    return {
+        rule,
+        revision: String(rule?.revision || proj?.revisionNumber || 'A').trim().toUpperCase(),
+        status: String(rule?.status || proj?.revisionStatus || 'IFR').trim().toUpperCase()
+    };
 }
 
 function hydrateRevisionState() {
     const saved = loadRevisionState();
     projectsData.forEach((p, index) => {
-        // Proyek pertama sudah seluruh line approved, sehingga contoh AFC tetap tampil.
-        const fallbackCode = index === 0 && p.lines.every(l => l.processApproval === 'Approved') ? 'IFC' : 'IFR';
+        // Jika project memiliki Setting Rule, rule project adalah satu-satunya sumber
+        // revision/status untuk cycle aktif. Fallback hanya dipakai untuk project lama
+        // yang memang belum memiliki Setting Rule.
         const state = saved[p.id] || {};
         if (Array.isArray(state.cycleRules) && state.cycleRules.length) p.cycleRules = normalizeProjectRules(state.cycleRules);
         if (Number.isFinite(Number(state.currentCycle)) && Number(state.currentCycle) >= 1) p.currentCycle = Number(state.currentCycle);
@@ -432,8 +464,12 @@ function setupUserInterfaceByRole() {
     const importTopBtn = document.getElementById('importExcelTopAction');
 
     if (addBtn) {
-        addBtn.classList.toggle('hidden', isLeadProcessOnly);
-        addBtn.disabled = isLeadProcessOnly;
+        // Project Manager dan Lead tidak boleh menambah Pipe Line.
+        const cannotAddLine = isLeadProcessOnly || isProjectManager;
+        addBtn.classList.toggle('hidden', cannotAddLine);
+        addBtn.disabled = cannotAddLine;
+        addBtn.setAttribute('aria-disabled', String(cannotAddLine));
+        addBtn.title = isProjectManager ? 'Project Manager tidak dapat menambah Pipe Line' : '';
     }
 
     // Project Manager tidak diperbolehkan melakukan Import Excel.
@@ -446,6 +482,15 @@ function setupUserInterfaceByRole() {
     if (importTopBtn) {
         importTopBtn.classList.toggle('hidden', isProjectManager);
         importTopBtn.style.display = isProjectManager ? 'none' : '';
+    }
+
+    // Project Manager tidak diperbolehkan membuat project baru.
+    // Sembunyikan tombol pada dropdown sidebar dan pastikan fungsi
+    // openAddProjectModal() juga memiliki guard sebagai pengaman kedua.
+    const sidebarAddProjectBtn = document.getElementById('sidebarAddProjectBtn');
+    if (sidebarAddProjectBtn) {
+        sidebarAddProjectBtn.classList.toggle('hidden', isProjectManager);
+        sidebarAddProjectBtn.style.display = isProjectManager ? 'none' : '';
     }
 }
 
@@ -512,9 +557,12 @@ function updateProjectDropdownOptions() {
         });
     }
 
-    // Tambahkan pemisah dan opsi tambah project di bagian bawah[cite: 10]
-    optionsHTML += `<option disabled>──────────────</option>`;
-    optionsHTML += `<option value="__ADD_NEW_PROJECT__" class="font-bold text-emerald-600">+ Add New Project...</option>`;
+    // Project Manager hanya dapat memilih project yang sudah ada.
+    // Opsi Add New Project disembunyikan untuk PM dan tetap tersedia untuk role lain.
+    if (currentUser?.role !== 'Project Manager') {
+        optionsHTML += `<option disabled>──────────────</option>`;
+        optionsHTML += `<option value="__ADD_NEW_PROJECT__" class="font-bold text-emerald-600">+ Add New Project...</option>`;
+    }
 
     switcher.innerHTML = optionsHTML;
 }
@@ -654,8 +702,9 @@ function renderRevisionHeader(proj) {
         </div>
         ${Array.isArray(proj.cycleHistory) && proj.cycleHistory.length ? (() => {
             const last = proj.cycleHistory[proj.cycleHistory.length - 1];
+            const previousStatus = String(last.configuredStatus || last.finalStatus || '').trim().toUpperCase();
             return `<div class="revision-final-result" title="Revisi sebelumnya telah dikunci setelah Final Approval PM">
-                <i class="fa-solid fa-lock"></i> Lock Rev sebelumnya: <b>Cycle ${escapeHtml(last.cycle)}</b> • <b>Rev ${escapeHtml(last.revision)}</b> • <b>IFU</b>
+                <i class="fa-solid fa-lock"></i> Lock Rev sebelumnya: <b>Cycle ${escapeHtml(last.cycle)}</b> • <b>Rev ${escapeHtml(last.revision)}</b> • <b>${escapeHtml(previousStatus || 'STATUS')}</b>
             </div>`;
         })() : ''}
     `;
@@ -825,12 +874,15 @@ function getCompletedCycleApprovalInfo(proj, line, stage) {
     const revision = String(history.revision || '').toUpperCase();
     // Setelah PM final approval, hasil cycle adalah IFU. Gunakan hasil final ini
     // sebagai label histori agar tidak berubah saat cycle berikutnya dibuka.
-    const finalStatus = String(history.finalStatus || 'IFU').toUpperCase();
+    // Histori cycle sebelumnya harus mengikuti STATUS yang dipilih user pada
+    // Setting Rules cycle tersebut. finalStatus hanya fallback untuk data lama.
+    const previousStatus = String(history.configuredStatus || history.finalStatus || '').trim().toUpperCase();
+    if (!previousStatus) return null;
     return {
         cycle: completedCycle,
         revision,
-        status: finalStatus,
-        label: `Approved Rev ${revision} ${finalStatus}`
+        status: previousStatus,
+        label: `Approved Rev ${revision} ${previousStatus}`
     };
 }
 
@@ -857,22 +909,54 @@ function getApprovalDisplay(line, proj, stage) {
     const cycle = Number(proj?.currentCycle || 1);
     const bucket = getLineApprovalBucket(line, cycle);
     const currentStatus = stage === 'piping' ? (bucket?.pipingApproval || 'Pending') : (bucket?.processApproval || 'Pending');
-    const activeRule = getActiveCycleRule(proj);
-    const currentRevision = String(activeRule?.revision || proj?.revisionNumber || '').toUpperCase();
-    const currentStatusCode = String(activeRule?.status || proj?.revisionStatus || '').toUpperCase();
+    const configuredDisplay = getConfiguredCycleDisplay(proj);
+    const currentRevision = configuredDisplay.revision;
+    const currentStatusCode = configuredDisplay.status;
     const previous = getCompletedCycleApprovalInfo(proj, line, stage);
-    const submitted = bucket?.submissionStatus === 'Waiting Approval Lead & PM' || bucket?.submissionStatus === 'Waiting Approval PM' || bucket?.submissionStatus === 'Approved';
-    const bothLeadsApproved = bucket?.processApproval === 'Approved' && bucket?.pipingApproval === 'Approved';
-    // submissionStatus tidak boleh menjadi sumber final approval; hanya pmApproval.
+    // Gunakan status pada bucket DAN line legacy agar status tetap tampil
+    // meskipun data approval berasal dari state versi sebelumnya.
+    const effectiveSubmissionStatus = bucket?.submissionStatus || line?.submissionStatus || '';
+    // Jangan hanya bergantung pada submissionStatus karena state lama/localStorage
+    // bisa belum tersinkron. Status approval harus tetap terlihat berdasarkan
+    // keputusan Lead/PM yang tersimpan pada bucket cycle aktif.
+    const hasWorkflowState = [
+        'Waiting Approval Lead & PM',
+        'Waiting Approval PM',
+        'Approved'
+    ].includes(effectiveSubmissionStatus) ||
+        bucket?.processApproval === 'Approved' ||
+        bucket?.pipingApproval === 'Approved' ||
+        bucket?.pmApproval === 'Ready for Final Approval' ||
+        bucket?.pmApproval === 'Approved';
+    const submitted = bucket?.submitted === true || !!bucket?.submittedAt ||
+        bucket?.processApproval === 'Approved' ||
+        bucket?.pipingApproval === 'Approved' ||
+        bucket?.pmApproval === 'Ready for Final Approval' ||
+        bucket?.pmApproval === 'Approved';
+    const processLeadApproved = bucket?.processApproval === 'Approved';
+    const pipingLeadApproved = bucket?.pipingApproval === 'Approved';
+    const bothLeadsApproved = processLeadApproved && pipingLeadApproved;
+    // Status final PM disimpan di bucket agar kolom Process Approval selalu
+    // mengikuti state approval yang sama.
     const pmApproved = bucket?.pmApproval === 'Approved';
     if (bothLeadsApproved && !pmApproved) {
         bucket.submissionStatus = 'Waiting Approval PM';
     }
     const isProcessEngineer = currentUser?.role === 'Process Engineer';
+    const carriedForward = Number(line?.carriedForwardFromCycle || 0) === Math.max(0, cycle - 1) || bucket?.carriedForward === true;
+
+    // Setelah final approval sebuah cycle, line yang sama dibawa ke cycle berikutnya.
+    // Sebelum line tersebut dikirim ulang, Process Approval menampilkan HASIL APPROVAL
+    // cycle sebelumnya (contoh: Approved Rev A IFR), bukan status target Rev B IFA.
+    if (!submitted && carriedForward && previous) {
+        return `<span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>`;
+    }
 
     // Baris baru/draft belum dikirim: kolom Process Approval sengaja kosong.
     // Engineer tetap melihat tombol Sent pada kolom Aksi.
-    if (bucket?.submissionStatus === 'Draft' || !bucket?.submissionStatus) {
+    // Jika bucket lama masih Draft tetapi line sudah memiliki status terkirim,
+    // jangan menghilangkan status dari kolom Process Approval.
+    if (!submitted && (effectiveSubmissionStatus === 'Draft' || !effectiveSubmissionStatus)) {
         return '';
     }
 
@@ -883,13 +967,28 @@ function getApprovalDisplay(line, proj, stage) {
     if (pmApproved) {
         return `<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
-    if (bothLeadsApproved) {
-        const rule = getActiveCycleRule(proj);
-        const revision = String(rule?.revision || proj.revisionNumber || 'A').toUpperCase();
-        const statusCode = String(rule?.status || proj.revisionStatus || 'IFR').toUpperCase();
+    // PM memiliki dua tahap: setelah Lead selesai, line siap di-approve PM;
+    // setelah PM melakukan Approve All/per-line approval, line masuk tahap
+    // Ready for Final Approval dan baru menjadi Approved saat Final Approval.
+    if (bucket?.pmApproval === 'Ready for Final Approval') {
         if (currentUser?.role === 'Project Manager' || currentUser?.role === 'System Administrator') {
-            return `<span class="approval-status-badge approval-pm-action">Approve Rev ${escapeHtml(revision)} ${escapeHtml(statusCode)}</span>`;
+            return `<span class="approval-status-badge approval-pm-action">Ready for Final Approval</span>`;
         }
+        return `<span class="approval-status-badge approval-pending">Ready for Final Approval</span>`;
+    }
+    if (bothLeadsApproved) {
+        // Setelah Lead Process + Lead Piping selesai, PM mendapat status
+        // yang sama dengan badge di area bawah: Ready to Approval.
+        if (currentUser?.role === 'Project Manager' || currentUser?.role === 'System Administrator') {
+            return `<span class="approval-status-badge approval-pm-action">Ready to Approval</span>`;
+        }
+        return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
+    }
+
+    // Jika Lead pada discipline yang sedang dilihat sudah approve, tetapi
+    // Lead discipline lain belum, status tetap menunjukkan bahwa tahap PM
+    // belum final dan masih menunggu alur approval berikutnya.
+    if ((stage === 'process' && processLeadApproved) || (stage === 'piping' && pipingLeadApproved)) {
         return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
     }
     if (submitted) {
@@ -904,6 +1003,13 @@ function getApprovalDisplay(line, proj, stage) {
             return `<span class="approval-status-badge approval-deleted">Deleted Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
         }
         return `<span class="approval-status-badge approval-pending">Waiting Approval Lead &amp; PM</span>`;
+    }
+
+    // Saat cycle baru sudah aktif, line lama yang belum dikirim ulang harus
+    // menunjukkan target revisi/cycle baru di kolom Process Approval.
+    // Baris baru tetap Draft dan sengaja ditangani di atas agar kolom kosong.
+    if (cycle > 1 && currentStatus === 'Pending') {
+        return `<span class="approval-status-badge approval-pm-action">Approve Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
 
     // Jika line baru mewarisi approval cycle sebelumnya, tampilkan histori saja.
@@ -1180,7 +1286,7 @@ function renderTableRows(proj) {
         const currentStatus = approvalStage === 'piping' ? line.pipingApproval : line.processApproval;
         const bucket = getLineApprovalBucket(line, proj.currentCycle);
         const rowInEditMode = !!workflowEditState[approvalStage]?.[index];
-        const submitted = ['Waiting Approval Lead & PM', 'Waiting Approval PM', 'Approved'].includes(bucket?.submissionStatus);
+        const submitted = bucket?.submitted === true || !!bucket?.submittedAt || bucket?.processApproval === 'Approved' || bucket?.pipingApproval === 'Approved' || bucket?.pmApproval === 'Ready for Final Approval' || bucket?.pmApproval === 'Approved';
         const canEditRow = !!canEdit && ((currentStatus === 'Pending' && !submitted) || rowInEditMode);
         const canEditRemarksRow = canEditRow || !!isLeadProcessOnly;
         const normalizedSeq = String(line.seq ?? '').replace(/\D/g, '').trim();
@@ -1192,17 +1298,30 @@ function renderTableRows(proj) {
 
         let actionHtml = '-';
         if (isManager) {
-            const managerCanApproveLine = (() => {
-                const b = getLineApprovalBucket(line, proj.currentCycle);
-                return b?.processApproval === 'Approved' && b?.pipingApproval === 'Approved' && b?.pmApproval !== 'Approved';
-            })();
-            actionHtml = `
-                <div class="approval-actions engineer-revision-actions">
-                    ${managerCanApproveLine ? `<button type="button" onclick="managerApproveLine(${index})" class="approval-btn approval-btn-approve" title="Approve PM" aria-label="Approve PM"><i class="fa-solid fa-check"></i></button>` : ''}
-                    <button type="button" onclick="managerRequestRevision(${index})" class="revision-need-btn" title="Need Revision" aria-label="Need Revision">
-                        <i class="fa-solid fa-arrow-rotate-left"></i>
-                    </button>
-                </div>`;
+            const managerBucket = getLineApprovalBucket(line, proj.currentCycle);
+            const managerCanApproveLine = managerBucket?.processApproval === 'Approved' &&
+                managerBucket?.pipingApproval === 'Approved' &&
+                !['Ready for Final Approval', 'Approved'].includes(managerBucket?.pmApproval);
+            const managerLineFinal = managerBucket?.pmApproval === 'Approved';
+            const managerLineReadyFinal = managerBucket?.pmApproval === 'Ready for Final Approval';
+
+            if (managerLineFinal) {
+                // Setelah PM final approval, aksi tidak boleh terlihat aktif lagi.
+                actionHtml = `
+                    <div class="approval-actions engineer-revision-actions">
+                        <button type="button" class="approval-btn approval-btn-disabled" disabled title="Approved Rev final" aria-label="Approved Rev final">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                    </div>`;
+            } else {
+                actionHtml = `
+                    <div class="approval-actions engineer-revision-actions">
+                        ${managerCanApproveLine ? `<button type="button" onclick="managerApproveLine(${index})" class="approval-btn approval-btn-approve" title="Approve PM" aria-label="Approve PM"><i class="fa-solid fa-check"></i></button>` : managerLineReadyFinal ? `<button type="button" class="approval-btn approval-btn-disabled" disabled title="Ready for Final Approval" aria-label="Ready for Final Approval"><i class="fa-solid fa-check"></i></button>` : ''}
+                        <button type="button" onclick="managerRequestRevision(${index})" class="revision-need-btn" title="Need Revision" aria-label="Need Revision">
+                            <i class="fa-solid fa-arrow-rotate-left"></i>
+                        </button>
+                    </div>`;
+            }
         } else if (canApprove) {
             const leadAlreadyApproved = currentStatus === 'Approved';
             actionHtml = `
@@ -1337,25 +1456,26 @@ function renderTableRows(proj) {
     if (isManager && managerArea) {
         managerArea.classList.remove('hidden');
         const cycle = Number(proj.currentCycle || 1);
-        const rule = getActiveCycleRule(proj);
-        const revision = String(rule?.revision || proj.revisionNumber || 'A').toUpperCase();
-        const docStatus = String(rule?.status || proj.revisionStatus || 'IFR').toUpperCase();
-        // Label tombol PM selalu mengikuti status cycle aktif. IFU hanya dipakai setelah final approval.
+        const configuredDisplay = getConfiguredCycleDisplay(proj);
+        const rule = configuredDisplay.rule;
+        const revision = configuredDisplay.revision;
+        const docStatus = configuredDisplay.status;
+        // Label tombol PM selalu mengikuti REV/STATUS pada Setting Rule cycle aktif.
         const pmApproveLabel = `Approve Rev ${revision} ${docStatus}`;
         const pmApproved = approvalState.pmApproved;
 
         managerArea.classList.toggle('manager-pm-approved', pmApproved);
         if (pmApproved) {
             if (managerApprovalStatusBadge) {
-                managerApprovalStatusBadge.textContent = 'IFU • LOCKED';
+                managerApprovalStatusBadge.textContent = `${docStatus} • LOCKED`;
                 managerApprovalStatusBadge.className = 'manager-status-badge bg-slate-100 text-slate-600 border border-slate-200';
             }
-            if (managerApprovalText) managerApprovalText.textContent = `Rev ${revision} / IFU sudah Final Approved oleh Project Manager dan terkunci.`;
+            if (managerApprovalText) managerApprovalText.textContent = `Rev ${revision} / ${docStatus} sudah Final Approved oleh Project Manager dan terkunci.`;
             if (managerFinalApproveBtn) {
                 managerFinalApproveBtn.disabled = true;
                 managerFinalApproveBtn.className = 'px-4 py-2 bg-slate-300 text-slate-500 rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-not-allowed';
                 const span = managerFinalApproveBtn.querySelector('span');
-                if (span) span.textContent = `Rev ${revision} IFU • Locked`;
+                if (span) span.textContent = `Rev ${revision} ${docStatus} • Locked`;
             }
         } else if (!approvalState.allApproved) {
             const missing = [];
@@ -1497,8 +1617,9 @@ function updateLineField(index, field, val) {
 }
 
 function addLineRow() {
-    if (currentUser && currentUser.role === 'Lead Process Engineer') {
-        showModal("Akses Ditolak", "Lead Process Engineer tidak memiliki akses untuk menambah Pipe Line.", "warning");
+    if (currentUser && ['Lead Process Engineer', 'Lead Piping Engineer', 'Project Manager'].includes(currentUser.role)) {
+        const roleLabel = currentUser.role === 'Project Manager' ? 'Project Manager' : currentUser.role;
+        showModal("Akses Ditolak", `${roleLabel} tidak memiliki akses untuk menambah Pipe Line.`, "warning");
         return;
     }
     const proj = projectsData[currentProjectIndex];
@@ -1716,6 +1837,10 @@ function resubmitWorkflowEdit(index, stage) {
         bucket.pipingApproval = 'Pending';
     }
     bucket.pmApproval = 'Pending';
+    bucket.submitted = true;
+    delete line.carriedForwardFromCycle;
+    bucket.carriedForward = false;
+    bucket.submittedAt = new Date().toISOString();
     bucket.submissionStatus = 'Waiting Approval Lead & PM';
     syncCurrentCycleApproval(line, proj.currentCycle);
     delete workflowEditState[stage][index];
@@ -1751,6 +1876,10 @@ function sendLineToLead(index) {
     bucket.processApproval = 'Pending';
     bucket.pipingApproval = 'Pending';
     bucket.pmApproval = 'Pending';
+    bucket.submitted = true;
+    delete line.carriedForwardFromCycle;
+    bucket.carriedForward = false;
+    bucket.submittedAt = new Date().toISOString();
     bucket.submissionStatus = 'Waiting Approval Lead & PM';
     line.pmRevisionRequested = false;
     syncCurrentCycleApproval(line, proj.currentCycle);
@@ -1794,6 +1923,10 @@ function leadRequestRevision(index, stage = 'process') {
     if (stage === 'piping') bucket.pipingApproval = 'Rejected';
     else bucket.processApproval = 'Rejected';
     bucket.pmApproval = 'Pending';
+    bucket.submitted = true;
+    delete line.carriedForwardFromCycle;
+    bucket.carriedForward = false;
+    bucket.submittedAt = new Date().toISOString();
     bucket.submissionStatus = 'Waiting Approval Lead & PM';
     line.pmRevisionRequested = false;
 
@@ -1890,13 +2023,13 @@ function managerApproveLine(index) {
         showModal('Belum Bisa Approve', 'Line harus sudah Approved oleh Lead Process dan Lead Piping.', 'warning');
         return;
     }
-    bucket.pmApproval = 'Approved';
-    bucket.submissionStatus = 'Approved';
+    bucket.pmApproval = 'Ready for Final Approval';
+    bucket.submissionStatus = 'Waiting Approval PM';
     syncCurrentCycleApproval(line, proj.currentCycle);
     saveApprovalState();
     renderDashboard();
     requestAnimationFrame(() => scrollLineListToRightAnimated(true));
-    showModal('Approval PM Berhasil', `Line ${index + 1} sudah fully approved sampai PM dan kolom Process Approval terkunci.`, 'success');
+    showModal('Approval PM Berhasil', `Line ${index + 1} sudah di-approve PM dan masuk tahap Ready for Final Approval.`, 'success');
 }
 
 
@@ -1909,7 +2042,7 @@ function confirmApproveAllPMSelected() {
     );
     const eligible = selectedIndexes.filter(index => {
         const b = getLineApprovalBucket(proj.lines[index], proj.currentCycle);
-        return b.processApproval === 'Approved' && b.pipingApproval === 'Approved' && b.pmApproval !== 'Approved';
+        return b.processApproval === 'Approved' && b.pipingApproval === 'Approved' && !['Ready for Final Approval', 'Approved'].includes(b.pmApproval);
     });
     if (!eligible.length) {
         showModal('Belum Bisa Approve', 'Tidak ada baris yang siap untuk approval PM.', 'warning');
@@ -1939,7 +2072,7 @@ function approveAllPMSelected() {
     }
     const eligible = selectedIndexes.filter(index => {
         const b = getLineApprovalBucket(proj.lines[index], proj.currentCycle);
-        return b.processApproval === 'Approved' && b.pipingApproval === 'Approved' && b.pmApproval !== 'Approved';
+        return b.processApproval === 'Approved' && b.pipingApproval === 'Approved' && !['Ready for Final Approval', 'Approved'].includes(b.pmApproval);
     });
     if (!eligible.length) {
         showModal('Belum Bisa Approve', 'Tidak ada baris yang sudah Approved oleh Lead Process dan Lead Piping.', 'warning');
@@ -1948,15 +2081,15 @@ function approveAllPMSelected() {
     eligible.forEach(index => {
         const line = proj.lines[index];
         const b = getLineApprovalBucket(line, proj.currentCycle);
-        b.pmApproval = 'Approved';
-        b.submissionStatus = 'Approved';
+        b.pmApproval = 'Ready for Final Approval';
+        b.submissionStatus = 'Waiting Approval PM';
         syncCurrentCycleApproval(line, proj.currentCycle);
     });
     set.clear();
     saveApprovalState();
     renderDashboard();
     requestAnimationFrame(() => scrollLineListToRightAnimated(true));
-    showModal('Approve All Berhasil', `${eligible.length} baris sudah fully approved sampai PM dan kolom Process Approval terkunci.`, 'success');
+    showModal('Approve All Berhasil', `${eligible.length} baris sudah masuk tahap Ready for Final Approval. Klik Approve Rev ${String(getActiveCycleRule(proj)?.revision || proj.revisionNumber || 'A').toUpperCase()} ${String(getActiveCycleRule(proj)?.status || proj.revisionStatus || 'IFR').toUpperCase()} untuk final approval.`, 'success');
 }
 
 function managerRequestRevision(index) {
@@ -1971,6 +2104,10 @@ function managerRequestRevision(index) {
     const bucket = getLineApprovalBucket(line, proj.currentCycle);
     bucket.processApproval = 'Pending';
     bucket.pmApproval = 'Pending';
+    bucket.submitted = true;
+    delete line.carriedForwardFromCycle;
+    bucket.carriedForward = false;
+    bucket.submittedAt = new Date().toISOString();
     bucket.submissionStatus = 'Waiting Approval Lead & PM';
     syncCurrentCycleApproval(line, proj.currentCycle);
     line.pmRevisionRequested = true;
@@ -1991,7 +2128,7 @@ function managerFinalApproval() {
         return;
     }
     if (!['Project Manager', 'System Administrator'].includes(role)) {
-        showModal('Akses Ditolak', 'Hanya Project Manager yang dapat memberikan Final Approval menjadi IFU.', 'warning');
+        showModal('Akses Ditolak', 'Hanya Project Manager yang dapat memberikan Final Approval.', 'warning');
         return;
     }
 
@@ -2014,8 +2151,21 @@ function managerFinalApproval() {
 
     if (Array.isArray(proj.cycleRules) && proj.cycleRules.length) {
         const oldCycle = Number(proj.currentCycle || 1);
-        const oldRule = getActiveCycleRule(proj);
-        const oldRevision = oldRule?.revision || proj.revisionNumber || 'A';
+        const oldDisplay = getConfiguredCycleDisplay(proj);
+        const oldRule = oldDisplay.rule;
+        const oldRevision = oldDisplay.revision;
+
+        // Final Approval mengubah seluruh line yang sudah masuk tahap PM menjadi Approved.
+        // Tahap sebelumnya hanya Ready for Final Approval agar status final tidak muncul
+        // sebelum tombol Approve Rev XX XXX benar-benar ditekan.
+        (proj.lines || []).forEach(line => {
+            const b = getLineApprovalBucket(line, oldCycle);
+            if (b?.pmApproval === 'Ready for Final Approval') {
+                b.pmApproval = 'Approved';
+                b.submissionStatus = 'Approved';
+            }
+            syncCurrentCycleApproval(line, oldCycle);
+        });
 
         // Simpan snapshot immutable dari cycle yang baru selesai. Snapshot ini menjadi histori
         // sehingga perubahan pada cycle berikutnya tidak pernah mengubah data cycle sebelumnya.
@@ -2028,11 +2178,13 @@ function managerFinalApproval() {
             lines: JSON.parse(JSON.stringify(proj.lines || []))
         });
 
-        // Final approval PM menghasilkan status IFU untuk revisi aktif.
+        // Final approval PM mengikuti STATUS yang dipilih user pada Setting Rule.
+        // Jangan pernah mengganti hasil menjadi IFU secara hard-coded.
+        const configuredFinalStatus = oldDisplay.status;
         proj.finalApproval = {
             role: 'Project Manager',
             status: 'Approved',
-            resultStatus: 'IFU',
+            resultStatus: configuredFinalStatus,
             revision: oldRevision,
             cycle: oldCycle,
             approvedAt: new Date().toISOString()
@@ -2043,28 +2195,30 @@ function managerFinalApproval() {
             cycle: oldCycle,
             revision: oldRevision,
             configuredStatus: oldRule?.status || proj.revisionStatus || 'IFR',
-            finalStatus: 'IFU',
+            finalStatus: configuredFinalStatus,
             processApproval: 'Approved',
             pipingApproval: 'Approved',
             pmApproval: 'Approved',
             approvedAt: new Date().toISOString()
         });
 
-        // Tampilkan hasil Rev X / IFU sebelum membuka cycle berikutnya.
+        // Setelah final approval, tetap tampilkan REV/STATUS yang dipilih
+        // pada Setting Rule. Jika masih ada cycle berikutnya, cycle tersebut
+        // baru dibuka setelah state cycle aktif disimpan.
         proj.revisionNumber = oldRevision;
-        proj.revisionStatus = 'IFU';
-        proj.documentStatus = getRevisionOption('IFU').label;
+        proj.revisionStatus = configuredFinalStatus;
+        proj.documentStatus = getRevisionOption(configuredFinalStatus).label;
         saveRevisionState();
         saveApprovalState();
 
         if (oldCycle >= proj.cycleRules.length) {
             proj.cycleCompleted = true;
             renderDashboard();
-            showModal('Final Approval Selesai', `Rev ${oldRevision} / IFU telah disetujui Lead Process, Lead Piping, dan Project Manager. Semua cycle project telah selesai.`, 'success');
+            showModal('Final Approval Selesai', `Rev ${oldRevision} / ${configuredFinalStatus} telah disetujui Lead Process, Lead Piping, dan Project Manager. Semua cycle project telah selesai.`, 'success');
             return;
         }
 
-        // Hanya setelah PM approve Rev X menjadi IFU, cycle berikutnya dibuka.
+        // Hanya setelah PM approve cycle aktif sesuai Setting Rule, cycle berikutnya dibuka.
         // Data cycle sebelumnya sudah dibekukan di cycleSnapshots; cycle berikutnya bekerja
         // pada salinan baru sehingga histori tidak pernah ikut berubah.
         const nextCycle = oldCycle;
@@ -2072,12 +2226,40 @@ function managerFinalApproval() {
         const nextCycleNumber = oldCycle + 1;
         nextCycleLines.forEach(line => {
             if (!line.approvalsByCycle || typeof line.approvalsByCycle !== 'object') line.approvalsByCycle = {};
+
+            // Line yang sudah fully approved pada cycle sebelumnya dibawa ke
+            // revisi berikutnya sebagai approved. Dengan demikian setelah
+            // tombol final approval (mis. Approve Rev A IFC) ditekan, kolom
+            // Process Approval langsung menampilkan hasil revisi berikutnya
+            // (mis. Approved Rev B IFR). Line baru tetap Draft dan harus
+            // melalui workflow approval dari awal.
+            const wasFullyApproved = line.pmApproval === 'Approved' ||
+                (line.processApproval === 'Approved' && line.pipingApproval === 'Approved');
+
+            // Approval cycle baru selalu dimulai dari Draft. Jika line sudah fully
+            // approved pada cycle sebelumnya, tandai sebagai carried-forward agar
+            // kolom Process Approval dapat menampilkan hasil cycle sebelumnya sampai
+            // Engineer menekan Sent untuk cycle yang baru.
             line.approvalsByCycle[String(nextCycleNumber)] = {
                 processApproval: 'Pending',
-                pipingApproval: 'Pending'
+                pipingApproval: 'Pending',
+                pmApproval: 'Pending',
+                submissionStatus: 'Draft',
+                submitted: false,
+                submittedAt: null,
+                carriedForward: wasFullyApproved
             };
-            line.processApproval = 'Pending';
-            line.pipingApproval = 'Pending';
+            if (wasFullyApproved) {
+                line.carriedForwardFromCycle = oldCycle;
+            } else {
+                delete line.carriedForwardFromCycle;
+            }
+
+            const nextBucket = line.approvalsByCycle[String(nextCycleNumber)];
+            line.processApproval = nextBucket.processApproval;
+            line.pipingApproval = nextBucket.pipingApproval;
+            line.pmApproval = nextBucket.pmApproval;
+            line.submissionStatus = nextBucket.submissionStatus;
             line.pmRevisionRequested = false;
         });
         proj.lines = nextCycleLines;
@@ -2089,18 +2271,24 @@ function managerFinalApproval() {
         renderDashboard();
 
         const nextRule = getActiveCycleRule(proj);
-        showModal('Cycle Berikutnya Aktif', `Rev ${oldRevision} / IFU telah disetujui. Sekarang Cycle ${proj.currentCycle} / Rev ${nextRule.revision} / ${getRevisionOption(nextRule.status).label} aktif dan menunggu approval baru.`, 'success');
+        showModal('Cycle Berikutnya Aktif', `Rev ${oldRevision} / ${configuredFinalStatus} telah disetujui. Sekarang Cycle ${proj.currentCycle} / Rev ${nextRule.revision} / ${getRevisionOption(nextRule.status).label} aktif dan menunggu approval baru.`, 'success');
         return;
     }
 
-    // Project tanpa Setting Rule: tetap menggunakan Final Approval sebagai IFU.
+    // Project tanpa Setting Rule: gunakan status aktif project.
     const revision = proj.revisionNumber || 'A';
-    proj.revisionStatus = 'IFU';
-    proj.documentStatus = getRevisionOption('IFU').label;
-    proj.finalApproval = { role: 'Project Manager', status: 'Approved', resultStatus: 'IFU', revision, approvedAt: new Date().toISOString() };
+    const configuredStatus = String(proj.revisionStatus || 'IFR').toUpperCase();
+    proj.documentStatus = getRevisionOption(configuredStatus).label;
+    proj.finalApproval = {
+        role: 'Project Manager',
+        status: 'Approved',
+        resultStatus: configuredStatus,
+        revision,
+        approvedAt: new Date().toISOString()
+    };
     saveRevisionState();
     renderDashboard();
-    showModal('Final Approval Selesai', `Rev ${revision} / IFU telah disetujui Lead Process, Lead Piping, dan Project Manager.`, 'success');
+    showModal('Final Approval Selesai', `Rev ${revision} / ${configuredStatus} telah disetujui Lead Process, Lead Piping, dan Project Manager.`, 'success');
 }
 
 function filterByColumn(colKey, val) {
@@ -2812,6 +3000,10 @@ function advanceProjectCycleAfterApproval(proj) {
 }
 
 function openAddProjectModal() {
+    if (currentUser?.role === 'Project Manager') {
+        showModal('Akses Ditolak', 'Project Manager tidak memiliki akses untuk menambah Project baru.', 'warning');
+        return;
+    }
     editingProjectRulesIndex = null;
     const modal = document.getElementById('addProjectModal');
     if (!modal) return;
