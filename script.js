@@ -344,7 +344,7 @@ projectsData.forEach(project => {
         }
         line.seq = String(line.seq ?? '').replace(/\D/g, '');
         line.spec = String(line.spec ?? '').trim().toUpperCase();
-        line.service = String(line.service ?? '').trim().toUpperCase();
+        line.service = String(line.service ?? '').trim();
         line.complete_no = buildCompleteLineNo(line, project.lines, index);
     });
 });
@@ -1213,6 +1213,111 @@ function updateApprovalSelectionHeader(stage) {
     if (checkbox) checkbox.checked = allSelected;
 }
 
+
+// =========================================================
+// FIELD OWNERSHIP + SENT READINESS
+// =========================================================
+// PWHT dan tiga field Stress Analysis hanya boleh diisi oleh Stress Engineer.
+// Process/Piping Engineer hanya mengisi field engineering. PWHT + Stress Analysis
+// hanya milik Stress Engineer. Tombol Sent baru aktif jika seluruh field input
+// wajib dari kedua bagian sudah terisi. Nilai valid seperti "-" / "N/A"
+// tetap dianggap terisi.
+const STRESS_ONLY_FIELDS = ['pwht', 'stress_critical', 'stress_calc_no'];
+
+const ENGINEER_REQUIRED_FIELDS = [
+    'size', 'fluid_id', 'spec', 'seq', 'ins_type', 'ins_thick',
+    'pid', 'from', 'to', 'service', 'phase', 'mass', 'vol',
+    'press_op', 'press_des', 'temp_op', 'temp_des', 'density', 'visc',
+    'nde_rt', 'nde_pt', 'test_med', 'test_press', 'painting', 'remarks'
+];
+
+// Stress/PWHT dikerjakan oleh Stress Engineer, tetapi tetap menjadi bagian
+// dari kelengkapan satu line. Sent baru hijau jika seluruh data engineering
+// DAN seluruh field Stress sudah terisi.
+const SEND_REQUIRED_FIELDS = [...ENGINEER_REQUIRED_FIELDS, ...STRESS_ONLY_FIELDS];
+
+function isStressEngineer() {
+    return currentUser?.role === 'Stress Engineer';
+}
+
+function isStressField(field) {
+    return STRESS_ONLY_FIELDS.includes(field);
+}
+
+function canEditTableField(field, canEditRow, stressCanEditRow = false) {
+    if (isStressField(field)) return !!stressCanEditRow;
+    return !!canEditRow;
+}
+
+function getMissingEngineerFields(line) {
+    return ENGINEER_REQUIRED_FIELDS.filter(field => {
+        const value = String(line?.[field] ?? '').trim();
+        return value === '';
+    });
+}
+
+function getMissingSendFields(line) {
+    return SEND_REQUIRED_FIELDS.filter(field => {
+        const value = String(line?.[field] ?? '').trim();
+        return value === '';
+    });
+}
+
+function isLineReadyForSend(line) {
+    // Complete Line No. dibuat otomatis. Sent hanya hijau jika SEMUA field
+    // input wajib, termasuk PWHT + Stress Analysis, sudah terisi.
+    return getMissingSendFields(line).length === 0;
+}
+
+function sentButtonHtml(index, line, submitted) {
+    if (submitted) {
+        return `<span class="text-[10px] text-slate-400 font-semibold">Terkirim</span>`;
+    }
+
+    const ready = isLineReadyForSend(line);
+    const title = ready
+        ? 'Kirim data ke Lead'
+        : 'Lengkapi semua kolom data terlebih dahulu';
+
+    return `
+        <button type="button"
+            onclick="${ready ? `sendLineToLead(${index})` : `showSendValidation(${index})`}"
+            class="revision-submit-btn ${ready ? '' : 'sent-btn-disabled'}"
+            title="${title}"
+            aria-label="Sent"
+            ${ready ? '' : 'aria-disabled="true"'}>
+            <i class="fa-solid fa-paper-plane"></i> Sent
+        </button>
+        <button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris">
+            <i class="fa-solid fa-trash"></i>
+        </button>`;
+}
+
+function showSendValidation(index) {
+    const proj = projectsData[currentProjectIndex];
+    const line = proj?.lines?.[index];
+    if (!line) return;
+
+    const missing = getMissingSendFields(line);
+    if (!missing.length) return;
+
+    const labels = {
+        size: 'Line Size', fluid_id: 'Process Fluid Identifier', spec: 'Pipe.Spec',
+        seq: 'Seq. No', ins_type: 'Insulation Type', ins_thick: 'Insulation Thickness',
+        pid: 'P&ID No', from: 'From', to: 'To', service: 'Fluid Service', phase: 'Phase',
+        mass: 'Mass Flow', vol: 'Volume Flow', press_op: 'Pressure Operating',
+        press_des: 'Pressure Design', temp_op: 'Temperature Operating',
+        temp_des: 'Temperature Design', density: 'Density', visc: 'Viscosity',
+        nde_rt: 'NDE RT', nde_pt: 'NDE PT', test_med: 'Test Medium',
+        test_press: 'Test Pressure', painting: 'Painting Code',
+        pwht: 'PWHT', stress_critical: 'Stress Analysis Criticality',
+        stress_calc_no: 'Stress Analysis Calculation Number', remarks: 'Remarks'
+    };
+
+    const names = missing.map(field => labels[field] || field).join(', ');
+    showModal('Data Belum Lengkap', `Lengkapi: ${names}. Setelah seluruh kolom terisi, tombol Sent akan berubah hijau.`, 'warning');
+}
+
 function renderTableRows(proj) {
     const tbody = document.getElementById('lineTableBody');
     tbody.innerHTML = '';
@@ -1253,6 +1358,7 @@ function renderTableRows(proj) {
 
     const isLeadProcessOnly = currentUser && currentUser.role === 'Lead Process Engineer';
     const isLeadPiping = currentUser && currentUser.role === 'Lead Piping Engineer';
+    const isStress = isStressEngineer();
     const canEdit = currentUser && ['Process Engineer', 'Piping Engineer', 'System Administrator'].includes(currentUser.role);
     const canEditRemarks = !!canEdit || !!isLeadProcessOnly;
     const isProcessLead = currentUser && ['Lead Process Engineer', 'System Administrator'].includes(currentUser.role);
@@ -1288,6 +1394,9 @@ function renderTableRows(proj) {
         const rowInEditMode = !!workflowEditState[approvalStage]?.[index];
         const submitted = bucket?.submitted === true || !!bucket?.submittedAt || bucket?.processApproval === 'Approved' || bucket?.pipingApproval === 'Approved' || bucket?.pmApproval === 'Ready for Final Approval' || bucket?.pmApproval === 'Approved';
         const canEditRow = !!canEdit && ((currentStatus === 'Pending' && !submitted) || rowInEditMode);
+        // Stress Engineer hanya mengisi field Stress Analysis + PWHT.
+        // Field lainnya tetap read-only untuk role Stress.
+        const stressCanEditRow = !!isStress && bucket?.pmApproval !== 'Approved';
         const canEditRemarksRow = canEditRow || !!isLeadProcessOnly;
         const normalizedSeq = String(line.seq ?? '').replace(/\D/g, '').trim();
         const isDuplicateSeq = index === duplicateSeqIndex && !!normalizedSeq && seqCounts[normalizedSeq] > 1;
@@ -1352,9 +1461,10 @@ function renderTableRows(proj) {
                 </div>`;
         } else if (isStageEngineer) {
             if (rowInEditMode) {
+                const readyForResubmit = isLineReadyForSend(line);
                 actionHtml = `
                     <div class="approval-actions engineer-revision-actions">
-                        <button type="button" onclick="resubmitWorkflowEdit(${index}, '${approvalStage}')" class="revision-submit-btn" title="Kirim kembali ke Lead"><i class="fa-solid fa-paper-plane"></i> Kirim Ulang</button>
+                        <button type="button" onclick="${readyForResubmit ? `resubmitWorkflowEdit(${index}, '${approvalStage}')` : `showSendValidation(${index})`}" class="revision-submit-btn ${readyForResubmit ? '' : 'sent-btn-disabled'}" title="${readyForResubmit ? 'Kirim kembali ke Lead' : 'Lengkapi semua kolom termasuk PWHT dan Stress Analysis'}" ${readyForResubmit ? '' : 'aria-disabled="true"'}><i class="fa-solid fa-paper-plane"></i> Kirim Ulang</button>
                         <button type="button" onclick="cancelWorkflowEdit(${index}, '${approvalStage}')" class="revision-cancel-btn" title="Batalkan edit"><i class="fa-solid fa-rotate-left"></i></button>
                     </div>`;
             } else if (currentStatus === 'Approved') {
@@ -1372,8 +1482,7 @@ function renderTableRows(proj) {
             } else {
                 actionHtml = `
                     <div class="approval-actions">
-                        <button type="button" onclick="sendLineToLead(${index})" class="revision-submit-btn" title="Kirim data ke Lead"><i class="fa-solid fa-paper-plane"></i> Sent</button>
-                        <button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris"><i class="fa-solid fa-trash"></i></button>
+                        ${sentButtonHtml(index, line, submitted)}
                     </div>`;
             }
         }
@@ -1410,7 +1519,7 @@ function renderTableRows(proj) {
                 <textarea wrap="off" rows="1" onchange="updateLineField(${index}, 'to', normalizeMultiValue(this.value))" ${fieldDisabledAttr('to', canEditRow)}
                     class="multi-line-cell w-full px-1.5 py-1 border rounded text-xs" title="${escapeHtmlAttr(line.to)}">${escapeHtml(line.to)}</textarea>
             </td>
-            <td><input type="text" value="${escapeHtmlAttr(String(line.service ?? '').toUpperCase())}" oninput="this.value=this.value.toUpperCase(); updateLineField(${index}, 'service', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
+            <td><input type="text" value="${escapeHtmlAttr(String(line.service ?? ''))}" oninput="updateLineField(${index}, 'service', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs service-normal-case"></td>
             <td><input type="text" value="${line.phase}" onchange="updateLineField(${index}, 'phase', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.mass}" onchange="updateLineField(${index}, 'mass', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             <td><input type="text" value="${line.vol}" onchange="updateLineField(${index}, 'vol', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
@@ -1425,9 +1534,9 @@ function renderTableRows(proj) {
             <td><input type="text" value="${line.test_med}" onchange="updateLineField(${index}, 'test_med', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
             <td><input type="text" value="${line.test_press}" onchange="updateLineField(${index}, 'test_press', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             <td><input type="text" value="${line.painting}" onchange="updateLineField(${index}, 'painting', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs"></td>
-            <td class="bg-amber-50/30"><input type="text" value="${line.pwht}" onchange="updateLineField(${index}, 'pwht', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs bg-amber-50/50"></td>
-            <td class="bg-amber-50/30"><input type="text" value="${line.stress_critical}" onchange="updateLineField(${index}, 'stress_critical', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs bg-amber-50/50"></td>
-            <td class="bg-amber-50/30"><input type="text" value="${line.stress_calc_no}" onchange="updateLineField(${index}, 'stress_calc_no', this.value)" ${!canEditRow ? 'disabled' : ''} class="w-28 px-1.5 py-1 border rounded text-xs bg-amber-50/50 font-mono"></td>
+            <td class="bg-amber-50/30"><input type="text" value="${escapeHtmlAttr(String(line.pwht ?? ''))}" onchange="updateLineField(${index}, 'pwht', this.value)" ${canEditTableField('pwht', canEditRow, stressCanEditRow) ? '' : 'disabled'} class="w-full px-1.5 py-1 border rounded text-xs bg-amber-50/50"></td>
+            <td class="bg-amber-50/30"><input type="text" value="${escapeHtmlAttr(String(line.stress_critical ?? ''))}" onchange="updateLineField(${index}, 'stress_critical', this.value)" ${canEditTableField('stress_critical', canEditRow, stressCanEditRow) ? '' : 'disabled'} class="w-full px-1.5 py-1 border rounded text-xs bg-amber-50/50"></td>
+            <td class="bg-amber-50/30"><input type="text" value="${escapeHtmlAttr(String(line.stress_calc_no ?? ''))}" onchange="updateLineField(${index}, 'stress_calc_no', this.value)" ${canEditTableField('stress_calc_no', canEditRow, stressCanEditRow) ? '' : 'disabled'} class="w-28 px-1.5 py-1 border rounded text-xs bg-amber-50/50 font-mono"></td>
             <td><input type="text" value="${escapeHtmlAttr(line.remarks)}" onchange="updateLineField(${index}, 'remarks', this.value)" ${!canEditRemarksRow ? 'disabled' : ''} class="w-full px-1.5 py-1 border rounded text-xs" title="${isLeadProcessOnly ? 'Lead Process Engineer hanya dapat mengubah Remarks' : ''}"></td>
             
             <td class="text-center bg-amber-50/40 approval-status-cell">
@@ -1516,6 +1625,27 @@ function renderTableRows(proj) {
     scheduleLineListAutoFit();
 }
 
+function refreshSentButtonForRow(index) {
+    const proj = projectsData[currentProjectIndex];
+    const line = proj?.lines?.[index];
+    const row = document.querySelector(`#lineTableBody tr[data-line-index="${index}"]`);
+    if (!line || !row) return;
+
+    const button = row.querySelector('.revision-submit-btn');
+    if (!button || button.textContent.includes('Kirim Ulang')) return;
+
+    const ready = isLineReadyForSend(line);
+    button.classList.toggle('sent-btn-disabled', !ready);
+    button.setAttribute('title', ready ? 'Kirim data ke Lead' : 'Lengkapi semua kolom data termasuk PWHT dan Stress Analysis');
+    if (ready) {
+        button.setAttribute('onclick', `sendLineToLead(${index})`);
+        button.removeAttribute('aria-disabled');
+    } else {
+        button.setAttribute('onclick', `showSendValidation(${index})`);
+        button.setAttribute('aria-disabled', 'true');
+    }
+}
+
 function updateLineField(index, field, val) {
     const line = projectsData[currentProjectIndex].lines[index];
 
@@ -1531,6 +1661,22 @@ function updateLineField(index, field, val) {
         return;
     }
 
+    // Field Stress/PWHT adalah milik Stress Engineer saja.
+    // Guard ini tetap berlaku walaupun seseorang mencoba memanggil
+    // updateLineField() langsung dari browser console.
+    if (isStressField(field) && currentUser?.role !== 'Stress Engineer') {
+        renderDashboard();
+        showModal('Akses Ditolak', 'Kolom PWHT dan Stress Analysis hanya dapat diisi oleh Stress Engineer.', 'warning');
+        return;
+    }
+
+    // Stress Engineer hanya boleh mengubah field milik Stress.
+    if (currentUser?.role === 'Stress Engineer' && !isStressField(field)) {
+        renderDashboard();
+        showModal('Akses Ditolak', 'Stress Engineer hanya dapat mengisi PWHT, Stress Analysis Criticality, dan Stress Analysis Calculation Number.', 'warning');
+        return;
+    }
+
     if (field === 'seq') {
         val = String(val ?? '').replace(/\D/g, '');
     }
@@ -1540,7 +1686,7 @@ function updateLineField(index, field, val) {
     }
 
     if (field === 'service') {
-        val = String(val ?? '').toUpperCase();
+        val = String(val ?? '');
     }
 
     if (field === 'pid') {
@@ -1614,6 +1760,9 @@ function updateLineField(index, field, val) {
             completeInput.value = currentLines[rowIndex].complete_no || '';
         }
     });
+
+    // Warna/aksi Sent diperbarui langsung saat field terakhir diisi.
+    refreshSentButtonForRow(index);
 }
 
 function addLineRow() {
@@ -1830,6 +1979,11 @@ function resubmitWorkflowEdit(index, stage) {
         showModal('Data Belum Lengkap', 'Seq. No. wajib diisi sebelum data dikirim kembali.', 'warning');
         return;
     }
+    const missing = getMissingSendFields(line);
+    if (missing.length) {
+        showSendValidation(index);
+        return;
+    }
     const bucket = getLineApprovalBucket(line, proj.currentCycle);
     if (stage === 'process') {
         bucket.processApproval = 'Pending';
@@ -1862,10 +2016,9 @@ function sendLineToLead(index) {
         showModal('Akses Ditolak', 'Hanya Engineer yang dapat mengirim data ke Lead.', 'warning');
         return;
     }
-    const requiredFields = ['size', 'fluid_id', 'spec', 'seq'];
-    const missing = requiredFields.filter(field => !String(line[field] ?? '').trim());
+    const missing = getMissingSendFields(line);
     if (missing.length) {
-        showModal('Data Belum Lengkap', 'Lengkapi Line Size, Process Fluid Identifier, Pipe.Spec, dan Seq. No. sebelum klik Sent.', 'warning');
+        showSendValidation(index);
         return;
     }
     const bucket = getLineApprovalBucket(line, proj.currentCycle);
@@ -2121,6 +2274,12 @@ function managerRequestRevision(index) {
 }
 
 function managerFinalApproval() {
+    // Saat PM menekan tombol ungu Final Approval, langsung arahkan tabel
+    // ke sisi paling kanan agar Process Approval + Aksi terlihat.
+    if (currentUser?.role === 'Project Manager') {
+        requestAnimationFrame(() => scrollLineListToRightAnimated(true));
+    }
+
     const proj = projectsData[currentProjectIndex];
     const role = currentUser?.role;
     if (!proj || !proj.lines.length) {
@@ -2214,6 +2373,7 @@ function managerFinalApproval() {
         if (oldCycle >= proj.cycleRules.length) {
             proj.cycleCompleted = true;
             renderDashboard();
+            requestAnimationFrame(() => scrollLineListToRightAnimated(true));
             showModal('Final Approval Selesai', `Rev ${oldRevision} / ${configuredFinalStatus} telah disetujui Lead Process, Lead Piping, dan Project Manager. Semua cycle project telah selesai.`, 'success');
             return;
         }
@@ -2434,7 +2594,7 @@ function handleExcelImport(e) {
                     line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
                     line.ins_thick = (line.ins_thick === '-' ? '' : String(line.ins_thick ?? '').replace(/[^0-9.]/g, ''));
                     line.seq = String(line.seq ?? '').replace(/\D/g, '');
-                    line.service = String(line.service ?? '').trim().toUpperCase();
+                    line.service = String(line.service ?? '').trim();
                     line.complete_no = '';
                 });
                 importedLines.forEach((line, index) => {

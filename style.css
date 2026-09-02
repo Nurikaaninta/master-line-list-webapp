@@ -53,7 +53,7 @@ body {
 .excel-table col.c-visc     { width: 110px; }
 .excel-table col.c-nde      { width: 100px; }
 .excel-table col.c-test-med { width: 120px; }
-.excel-table col.c-test-press { width: 130px; }
+.excel-table col.c-test-press { width: 92px; min-width: 92px; max-width: 92px; }
 .excel-table col.c-painting { width: 125px; }
 .excel-table col.c-pwht    { width: 100px; }
 .excel-table col.c-stress  { width: 155px; }
@@ -84,6 +84,18 @@ body {
     position: sticky;
     top: 0;
     z-index: 100;
+}
+
+/* Semua isi data tabel dirapikan ke tengah. Header tetap mengikuti aturan header di bawah. */
+.excel-table tbody td {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+.excel-table tbody td input:not([type="checkbox"]):not([type="radio"]),
+.excel-table tbody td select,
+.excel-table tbody td textarea {
+    text-align: center !important;
 }
 
 .excel-table thead th {
@@ -1392,4 +1404,119 @@ body {
 }
 .manager-pm-approved #managerFinalApproveBtn {
     min-width: 170px;
+}
+
+
+/* =========================================================
+   FINAL TABLE POLISH
+   - Semua isi data rata tengah.
+   - Fluid Service mempertahankan huruf yang diketik user
+     (tidak dipaksa uppercase).
+   - Pressure [Barg] dibuat lebih proporsional.
+   - Sent abu-abu sampai seluruh data engineer lengkap,
+     lalu otomatis hijau.
+   ========================================================= */
+
+.excel-table tbody td {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+.excel-table tbody td input:not([type="checkbox"]):not([type="radio"]),
+.excel-table tbody td select,
+.excel-table tbody td textarea {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+.excel-table tbody td .service-normal-case {
+    text-transform: none !important;
+    text-align: center !important;
+}
+
+/* Pressure Operating + Design: jangan mengambil lebar berlebihan. */
+.excel-table col.c-press {
+    width: 92px !important;
+    min-width: 92px !important;
+    max-width: 92px !important;
+}
+
+.excel-table td.pressure-cell,
+.excel-table th.pressure-subheader {
+    text-align: center !important;
+}
+
+/* Pressure Test > Pressure [Barg] dibuat compact agar tidak mengambil ruang berlebihan. */
+.excel-table col.c-test-press {
+    width: 92px !important;
+    min-width: 92px !important;
+    max-width: 92px !important;
+}
+
+/* Ownership field Stress/PWHT tetap rapi dan mudah dibaca. */
+.excel-table col.c-pwht {
+    width: 92px !important;
+    min-width: 92px !important;
+}
+.excel-table col.c-stress {
+    width: 150px !important;
+    min-width: 150px !important;
+}
+.excel-table col.c-stress-calc {
+    width: 180px !important;
+    min-width: 180px !important;
+}
+
+/* Sent: tidak hijau sebelum seluruh field engineer terisi. */
+.sent-btn-disabled,
+.sent-btn-disabled:hover,
+.sent-btn-disabled:focus {
+    background: #e2e8f0 !important;
+    color: #64748b !important;
+    border-color: #cbd5e1 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+}
+
+.revision-submit-btn:not(.sent-btn-disabled) {
+    background: #10b981 !important;
+    color: #ffffff !important;
+    border-color: #10b981 !important;
+}
+
+.revision-submit-btn:not(.sent-btn-disabled):hover {
+    background: #059669 !important;
+    border-color: #059669 !important;
+}
+
+/* FINAL FIX - PRESSURE TEST WIDTH
+   Pressure Test > Pressure [Barg] harus compact dan stabil.
+   Jangan biarkan isi/header memperlebar kolom secara otomatis. */
+.excel-table col.c-test-med {
+    width: 112px !important;
+    min-width: 112px !important;
+    max-width: 112px !important;
+}
+.excel-table col.c-test-press {
+    width: 92px !important;
+    min-width: 92px !important;
+    max-width: 92px !important;
+}
+.excel-table th.pressure-test-subheader,
+.excel-table td.pressure-test-cell {
+    width: 92px !important;
+    min-width: 92px !important;
+    max-width: 92px !important;
+    box-sizing: border-box !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    text-align: center !important;
+}
+.excel-table td.pressure-test-cell input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
 }
