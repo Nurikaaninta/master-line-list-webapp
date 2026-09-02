@@ -1357,3 +1357,39 @@ body {
 .document-number-value, #projectDocumentNumber, [data-project-document-number] { text-transform: uppercase !important; }
 
 .approval-status-badge.approval-neutral{background:#f8fafc;color:#64748b;border:1px solid #cbd5e1;}
+
+/* ===== Approval workflow refinement ===== */
+.approval-btn-disabled,
+.approval-btn-disabled:hover {
+    background: #e2e8f0 !important;
+    color: #94a3b8 !important;
+    border-color: #cbd5e1 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    filter: none !important;
+}
+.approval-btn-revision {
+    background: #fff7ed;
+    color: #c2410c;
+    border-color: #fed7aa;
+}
+.approval-btn-revision:hover {
+    background: #ffedd5;
+    color: #9a3412;
+    transform: translateY(-1px);
+}
+.approval-pm-action {
+    background: #ede9fe;
+    color: #6d28d9;
+    border-color: #ddd6fe;
+    font-weight: 800;
+}
+.excel-table col.c-approval { width: 190px; }
+.excel-table col.c-action { width: 125px; }
+.excel-table td.process-approval-cell,
+.excel-table td.action-cell {
+    text-align: center;
+}
+.manager-pm-approved #managerFinalApproveBtn {
+    min-width: 170px;
+}

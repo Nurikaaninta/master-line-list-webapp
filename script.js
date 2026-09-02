@@ -870,6 +870,12 @@ function getApprovalDisplay(line, proj, stage) {
     }
     const isProcessEngineer = currentUser?.role === 'Process Engineer';
 
+    // Baris baru/draft belum dikirim: kolom Process Approval sengaja kosong.
+    // Engineer tetap melihat tombol Sent pada kolom Aksi.
+    if (bucket?.submissionStatus === 'Draft' || !bucket?.submissionStatus) {
+        return '';
+    }
+
     // Satu line hanya boleh menampilkan SATU status utama.
     // Status "Pending Approval (sementara)" hanya untuk Process Engineer
     // pada data yang belum dikirim ke Lead. Role approval lain tidak melihat
@@ -878,6 +884,12 @@ function getApprovalDisplay(line, proj, stage) {
         return `<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
     if (bothLeadsApproved) {
+        const rule = getActiveCycleRule(proj);
+        const revision = String(rule?.revision || proj.revisionNumber || 'A').toUpperCase();
+        const statusCode = String(rule?.status || proj.revisionStatus || 'IFR').toUpperCase();
+        if (currentUser?.role === 'Project Manager' || currentUser?.role === 'System Administrator') {
+            return `<span class="approval-status-badge approval-pm-action">Approve Rev ${escapeHtml(revision)} ${escapeHtml(statusCode)}</span>`;
+        }
         return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
     }
     if (submitted) {
@@ -1000,6 +1012,43 @@ function managerRequestRevisionSelected() {
     );
 }
 
+
+function confirmApproveAllSelected(stage) {
+    const proj = projectsData[currentProjectIndex];
+    if (!proj) return;
+
+    const set = approvalSelection[stage];
+    const selectedIndexes = Array.from(set || []).filter(index =>
+        Number.isInteger(index) &&
+        proj.lines[index] &&
+        checkRowAgainstFilters(proj.lines[index])
+    );
+    if (!selectedIndexes.length) {
+        showModal('Belum Ada Baris Dipilih', 'Pilih baris terlebih dahulu menggunakan checkbox "Semua" atau checkbox pada masing-masing baris.', 'warning');
+        return;
+    }
+
+    const eligible = selectedIndexes.filter(index => {
+        const b = getLineApprovalBucket(proj.lines[index], proj.currentCycle);
+        return (stage === 'piping' ? b.pipingApproval : b.processApproval) !== 'Approved';
+    });
+    if (!eligible.length) {
+        showModal('Tidak Ada Data', 'Semua baris yang dipilih sudah Approved.', 'info');
+        return;
+    }
+
+    const rule = getActiveCycleRule(proj);
+    const revision = String(rule?.revision || proj.revisionNumber || 'A').toUpperCase();
+    const status = String(rule?.status || proj.revisionStatus || 'IFR').toUpperCase();
+    const roleLabel = stage === 'piping' ? 'Lead Piping' : 'Lead Process';
+
+    openApprovalConfirm(
+        `Approve Rev ${revision} ${status}`,
+        `Apakah yakin untuk approve Rev ${revision} ${status} untuk ${eligible.length} baris sebagai ${roleLabel}?`,
+        () => approveAllSelected(stage)
+    );
+}
+
 function approveAllSelected(stage) {
     const proj = projectsData[currentProjectIndex];
     if (!proj) return;
@@ -1080,12 +1129,12 @@ function renderTableRows(proj) {
                 </label>
                 ${canBulkApprove ? `
                     <label class="approval-header-check approval-all-check" title="Approve seluruh baris yang sudah dipilih">
-                        <input id="approveAllRows" type="checkbox" class="h-4 w-4 accent-emerald-600 cursor-pointer" onchange="if(this.checked){ this.checked=false; approveAllSelected('${selectionStage}'); }">
+                        <input id="approveAllRows" type="checkbox" class="h-4 w-4 accent-emerald-600 cursor-pointer" onchange="if(this.checked){ this.checked=false; confirmApproveAllSelected('${selectionStage}'); }">
                         <span>Approve All</span>
                     </label>` : ''}
                 ${selectionStage === 'manager' ? `
                     <label class="approval-header-check approval-all-check" title="Approve PM seluruh baris yang sudah dipilih">
-                        <input id="approveAllPMRows" type="checkbox" class="h-4 w-4 accent-emerald-600 cursor-pointer" onchange="if(this.checked){ this.checked=false; approveAllPMSelected(); }">
+                        <input id="approveAllPMRows" type="checkbox" class="h-4 w-4 accent-emerald-600 cursor-pointer" onchange="if(this.checked){ this.checked=false; confirmApproveAllPMSelected(); }">
                         <span>Approve All</span>
                     </label>` : ''}
                 ${canBulkRevision ? `
@@ -1155,11 +1204,32 @@ function renderTableRows(proj) {
                     </button>
                 </div>`;
         } else if (canApprove) {
+            const leadAlreadyApproved = currentStatus === 'Approved';
             actionHtml = `
                 <div class="approval-actions" aria-label="Approval actions">
-                    <button type="button" onclick="setApprovalStatus(${index}, 'Approved', '${approvalStage}')" class="approval-btn approval-btn-approve" title="Approve" aria-label="Approve"><i class="fa-solid fa-check"></i></button>
-                    <button type="button" onclick="setApprovalStatus(${index}, 'Rejected', '${approvalStage}')" class="approval-btn approval-btn-reject" title="Reject" aria-label="Reject"><i class="fa-solid fa-xmark"></i></button>
-                    <button type="button" onclick="setApprovalStatus(${index}, 'Deleted', '${approvalStage}')" class="approval-btn approval-btn-delete" title="Delete status" aria-label="Delete status"><i class="fa-solid fa-trash"></i></button>
+                    <button type="button"
+                        onclick="${leadAlreadyApproved ? '' : `setApprovalStatus(${index}, 'Approved', '${approvalStage}')`}"
+                        class="approval-btn approval-btn-approve ${leadAlreadyApproved ? 'approval-btn-disabled' : ''}"
+                        title="${leadAlreadyApproved ? 'Sudah Approved' : 'Approve'}"
+                        aria-label="${leadAlreadyApproved ? 'Sudah Approved' : 'Approve'}"
+                        ${leadAlreadyApproved ? 'disabled' : ''}>
+                        <i class="fa-solid fa-check"></i>
+                    </button>
+                    <button type="button"
+                        onclick="${leadAlreadyApproved ? '' : `setApprovalStatus(${index}, 'Rejected', '${approvalStage}')`}"
+                        class="approval-btn approval-btn-reject ${leadAlreadyApproved ? 'approval-btn-disabled' : ''}"
+                        title="${leadAlreadyApproved ? 'Terkunci setelah Approved' : 'Reject'}"
+                        aria-label="${leadAlreadyApproved ? 'Terkunci setelah Approved' : 'Reject'}"
+                        ${leadAlreadyApproved ? 'disabled' : ''}>
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    <button type="button"
+                        onclick="leadRequestRevision(${index}, '${approvalStage}')"
+                        class="approval-btn approval-btn-revision"
+                        title="Minta Revisi"
+                        aria-label="Minta Revisi">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
                 </div>`;
         } else if (isStageEngineer) {
             if (rowInEditMode) {
@@ -1469,7 +1539,7 @@ function addLineRow() {
         processApproval: "Pending",
         pipingApproval: "Pending",
         pmApproval: "Pending",
-        submissionStatus: "Pending Approval (sementara)",
+        submissionStatus: "Draft",
         approvalsByCycle: {}
     });
 
@@ -1674,7 +1744,7 @@ function sendLineToLead(index) {
         return;
     }
     const bucket = getLineApprovalBucket(line, proj.currentCycle);
-    if (bucket.submissionStatus !== 'Pending Approval (sementara)') {
+    if (!['Draft', '', 'Pending Approval (sementara)'].includes(bucket.submissionStatus)) {
         showModal('Data Sudah Dikirim', 'Line ini sudah berada dalam proses approval dan tidak perlu dikirim ulang.', 'info');
         return;
     }
@@ -1699,6 +1769,44 @@ function deleteLineRow(index) {
     saveApprovalState();
     renderDashboard();
     showModal("Informasi", "Baris pipa telah dihapus.", "info");
+}
+
+
+function leadRequestRevision(index, stage = 'process') {
+    const proj = projectsData[currentProjectIndex];
+    const line = proj?.lines?.[index];
+    const role = currentUser?.role;
+    const allowed = (stage === 'process' && role === 'Lead Process Engineer') ||
+                    (stage === 'piping' && role === 'Lead Piping Engineer') ||
+                    role === 'System Administrator';
+    if (!proj || !line || !allowed) {
+        showModal('Akses Ditolak', 'Hanya Lead terkait yang dapat meminta revisi.', 'warning');
+        return;
+    }
+
+    const bucket = getLineApprovalBucket(line, proj.currentCycle);
+    const stageLabel = stage === 'piping' ? 'Lead Piping' : 'Lead Process';
+    if (bucket?.pmApproval === 'Approved') {
+        showModal('Line Sudah Final', 'Line yang sudah di-approve PM tidak dapat diminta revisi pada cycle aktif.', 'warning');
+        return;
+    }
+
+    if (stage === 'piping') bucket.pipingApproval = 'Rejected';
+    else bucket.processApproval = 'Rejected';
+    bucket.pmApproval = 'Pending';
+    bucket.submissionStatus = 'Waiting Approval Lead & PM';
+    line.pmRevisionRequested = false;
+
+    syncCurrentCycleApproval(line, proj.currentCycle);
+    saveApprovalState();
+    renderDashboard();
+    requestAnimationFrame(() => scrollLineListToRightAnimated(true));
+
+    showModal(
+        'Revisi Diminta',
+        `Line ${index + 1} diminta revisi oleh ${stageLabel}. Engineer dapat memperbaiki data lalu mengirim ulang.`,
+        'info'
+    );
 }
 
 function setApprovalStatus(index, status, stage = 'process') {
@@ -1789,6 +1897,32 @@ function managerApproveLine(index) {
     renderDashboard();
     requestAnimationFrame(() => scrollLineListToRightAnimated(true));
     showModal('Approval PM Berhasil', `Line ${index + 1} sudah fully approved sampai PM dan kolom Process Approval terkunci.`, 'success');
+}
+
+
+function confirmApproveAllPMSelected() {
+    const proj = projectsData[currentProjectIndex];
+    if (!proj) return;
+    const set = approvalSelection.manager;
+    const selectedIndexes = Array.from(set || []).filter(index =>
+        Number.isInteger(index) && proj.lines[index] && checkRowAgainstFilters(proj.lines[index])
+    );
+    const eligible = selectedIndexes.filter(index => {
+        const b = getLineApprovalBucket(proj.lines[index], proj.currentCycle);
+        return b.processApproval === 'Approved' && b.pipingApproval === 'Approved' && b.pmApproval !== 'Approved';
+    });
+    if (!eligible.length) {
+        showModal('Belum Bisa Approve', 'Tidak ada baris yang siap untuk approval PM.', 'warning');
+        return;
+    }
+    const rule = getActiveCycleRule(proj);
+    const revision = String(rule?.revision || proj.revisionNumber || 'A').toUpperCase();
+    const status = String(rule?.status || proj.revisionStatus || 'IFR').toUpperCase();
+    openApprovalConfirm(
+        `Approve Rev ${revision} ${status}`,
+        `Apakah yakin untuk approve Rev ${revision} ${status} untuk ${eligible.length} baris sebagai Project Manager?`,
+        () => approveAllPMSelected()
+    );
 }
 
 function approveAllPMSelected() {
@@ -1947,7 +2081,7 @@ function managerFinalApproval() {
             line.pmRevisionRequested = false;
         });
         proj.lines = nextCycleLines;
-        applyProjectCycle(proj, nextCycle);
+        applyProjectCycle(proj, nextCycleNumber - 1);
         proj.finalApproval = null;
         proj.cycleCompleted = false;
         saveApprovalState();
@@ -2498,6 +2632,36 @@ function initDocumentUpload() {
     const input = document.getElementById('documentUploadInput');
     if (input) input.addEventListener('change', handleDocumentUpload);
     renderUploadedDocuments();
+}
+
+
+let approvalConfirmCallback = null;
+
+function openApprovalConfirm(title, text, onYes) {
+    const modal = document.getElementById('approvalConfirmModal');
+    const titleEl = document.getElementById('approvalConfirmTitle');
+    const textEl = document.getElementById('approvalConfirmText');
+    if (!modal || !titleEl || !textEl) {
+        // Fallback only if the confirmation UI is unavailable.
+        if (typeof onYes === 'function') onYes();
+        return;
+    }
+    titleEl.textContent = title;
+    textEl.textContent = text;
+    approvalConfirmCallback = typeof onYes === 'function' ? onYes : null;
+    modal.classList.remove('hidden');
+}
+
+function closeApprovalConfirm() {
+    const modal = document.getElementById('approvalConfirmModal');
+    if (modal) modal.classList.add('hidden');
+    approvalConfirmCallback = null;
+}
+
+function confirmApprovalYes() {
+    const callback = approvalConfirmCallback;
+    closeApprovalConfirm();
+    if (typeof callback === 'function') callback();
 }
 
 function showModal(title, text, type = "info") {
