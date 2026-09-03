@@ -1,17 +1,59 @@
 // ==========================================
 // DATA UTAMA & STATE APLIKASI
 // ==========================================
-let accountsList = [
-    { name: "Process Engineer", email: "process@piping.com", role: "Process Engineer", pass: "pass123" },
-    { name: "Lead Process", email: "leadprocess@piping.com", role: "Lead Process Engineer", pass: "pass123" },
-    { name: "Piping Engineer", email: "piping@piping.com", role: "Piping Engineer", pass: "pass123" },
-    { name: "Lead Piping", email: "leadpiping@piping.com", role: "Lead Piping Engineer", pass: "pass123" },
-    { name: "Stress Engineer", email: "stress@piping.com", role: "Stress Engineer", pass: "pass123" },
-    { name: "Designer Team", email: "designer@piping.com", role: "Designer", pass: "pass123" },
-    { name: "QA/QC Team", email: "qaqc@piping.com", role: "QA/QC", pass: "pass123" },
-    { name: "Project Manager", email: "pm@piping.com", role: "Project Manager", pass: "pass123" },
-    { name: "Admin Studio", email: "admin@piping.com", role: "System Administrator", pass: "pass123" }
+const ACCOUNTS_STORAGE_KEY = 'masterLineListAccounts_v1';
+const DEFAULT_ACCOUNTS = [
+    { id: 'process', name: "Process Engineer", email: "process@piping.com", role: "Process Engineer", pass: "pass123", active: true },
+    { id: 'lead-process', name: "Lead Process", email: "leadprocess@piping.com", role: "Lead Process Engineer", pass: "pass123", active: true },
+    { id: 'piping', name: "Piping Engineer", email: "piping@piping.com", role: "Piping Engineer", pass: "pass123", active: true },
+    { id: 'lead-piping', name: "Lead Piping", email: "leadpiping@piping.com", role: "Lead Piping Engineer", pass: "pass123", active: true },
+    { id: 'stress', name: "Stress Engineer", email: "stress@piping.com", role: "Stress Engineer", pass: "pass123", active: true },
+    { id: 'designer', name: "Designer Team", email: "designer@piping.com", role: "Designer", pass: "pass123", active: true },
+    { id: 'project-manager', name: "Project Manager", email: "pm@piping.com", role: "Project Manager", pass: "pass123", active: true },
+    { id: 'admin', name: "Admin Studio", email: "admin@piping.com", role: "System Administrator", pass: "pass123", active: true }
 ];
+
+function loadAccounts() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || 'null');
+        if (Array.isArray(stored) && stored.length) {
+            // Migrasi data lama: hapus akun QA/QC Team bawaan yang sebelumnya tampil di daftar anggota.
+            // Role QA/QC tetap tersedia untuk akun baru yang memang ditambahkan oleh Administrator.
+            const cleaned = stored.filter(acc => {
+                const id = String(acc?.id || '').trim().toLowerCase();
+                const email = String(acc?.email || '').trim().toLowerCase();
+                const name = String(acc?.name || '').trim().toLowerCase();
+                return !(id === 'qaqc' || email === 'qaqc@piping.com' || name === 'qa/qc team');
+            });
+            if (cleaned.length !== stored.length) {
+                localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(cleaned));
+            }
+            return cleaned.map((acc, index) => ({
+                id: acc.id || `account-${Date.now()}-${index}`,
+                name: String(acc.name || '').trim(),
+                email: String(acc.email || '').trim().toLowerCase(),
+                role: String(acc.role || 'Process Engineer'),
+                pass: String(acc.pass || ''),
+                active: acc.active !== false,
+                createdAt: acc.createdAt || null
+            }));
+        }
+    } catch (e) {
+        console.warn('Gagal membaca data akun lokal:', e);
+    }
+    return DEFAULT_ACCOUNTS.map(acc => ({ ...acc }));
+}
+
+function saveAccounts() {
+    try {
+        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accountsList));
+    } catch (e) {
+        console.error('Gagal menyimpan akun:', e);
+        showModal?.('Penyimpanan Gagal', 'Akun berhasil dibuat di sesi ini, tetapi browser tidak dapat menyimpannya secara permanen.', 'warning');
+    }
+}
+
+let accountsList = loadAccounts();
 
 let currentUser = null;
 
@@ -149,7 +191,8 @@ function saveRevisionState() {
                 cycleRules: Array.isArray(p.cycleRules) ? p.cycleRules : [],
                 cycleHistory: Array.isArray(p.cycleHistory) ? p.cycleHistory : [],
                 cycleSnapshots: Array.isArray(p.cycleSnapshots) ? p.cycleSnapshots : [],
-                finalApproval: p.finalApproval || null
+                finalApproval: p.finalApproval || null,
+                cycleCompleted: !!p.cycleCompleted
             };
         });
         localStorage.setItem(REVISION_STORAGE_KEY, JSON.stringify(state));
@@ -216,6 +259,7 @@ function hydrateRevisionState() {
         if (Array.isArray(state.cycleHistory)) p.cycleHistory = state.cycleHistory;
         if (Array.isArray(state.cycleSnapshots)) p.cycleSnapshots = state.cycleSnapshots;
         if (state.finalApproval) p.finalApproval = state.finalApproval;
+        if (typeof state.cycleCompleted === 'boolean') p.cycleCompleted = state.cycleCompleted;
         if (Array.isArray(p.cycleRules) && p.cycleRules.length) {
             const activeRule = getActiveCycleRule(p);
             p.revisionStatus = activeRule?.status || p.revisionStatus || fallbackCode;
@@ -349,6 +393,7 @@ projectsData.forEach(project => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+    renderTeamMembers();
     // Event Listener untuk Form Login
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
@@ -356,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const email = document.getElementById('loginEmail').value.trim();
             const pass = document.getElementById('loginPassword').value.trim();
-            const found = accountsList.find(acc => acc.email === email && acc.pass === pass);
+            const found = accountsList.find(acc => acc.active !== false && acc.email.toLowerCase() === email.toLowerCase() && acc.pass === pass);
             if (found) {
                 currentUser = found;
                 
@@ -392,9 +437,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 showModal("Peringatan", "Email akun tersebut sudah terdaftar di Studio.", "warning");
                 return;
             }
-            accountsList.push({ name, email, role, pass });
+            if (!name || !email || !role || !pass) {
+                showModal("Data Belum Lengkap", "Nama, email, role, dan password wajib diisi.", "warning");
+                return;
+            }
+            const newAccount = {
+                id: `account-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                name,
+                email: email.toLowerCase(),
+                role,
+                pass,
+                active: true,
+                createdAt: new Date().toISOString()
+            };
+            accountsList.push(newAccount);
+            saveAccounts();
+            renderTeamMembers();
             closeAddAccountModal();
-            showModal("Berhasil", `Akun baru untuk ${name} (${role}) berhasil ditambahkan!`, "success");
+            showModal("Berhasil", `Akun baru untuk ${name} (${role}) berhasil ditambahkan dan langsung aktif.`, "success");
             adminAddAccountForm.reset();
         });
     }
@@ -1842,7 +1902,13 @@ function refreshSentButtonForRow(index) {
 }
 
 function updateLineField(index, field, val) {
-    const line = projectsData[currentProjectIndex].lines[index];
+    const activeProject = projectsData[currentProjectIndex];
+    if (isProjectFullyLocked(activeProject)) {
+        renderDashboard();
+        showModal('Project Terkunci', 'Cycle terakhir sudah Final Approved. Semua data project terkunci.', 'warning');
+        return;
+    }
+    const line = activeProject.lines[index];
 
     if (currentUser && currentUser.role === 'Lead Process Engineer' && field !== 'remarks') {
         renderDashboard();
@@ -1962,6 +2028,11 @@ function updateLineField(index, field, val) {
 }
 
 function addLineRow() {
+    const activeProject = projectsData[currentProjectIndex];
+    if (isProjectFullyLocked(activeProject)) {
+        showModal('Project Terkunci', 'Cycle terakhir sudah Final Approved. Semua data project terkunci. Tambahkan cycle baru untuk membuka workflow approval berikutnya.', 'warning');
+        return;
+    }
     if (currentUser && ['Lead Process Engineer', 'Lead Piping Engineer', 'Project Manager'].includes(currentUser.role)) {
         const roleLabel = currentUser.role === 'Project Manager' ? 'Project Manager' : currentUser.role;
         showModal("Akses Ditolak", `${roleLabel} tidak memiliki akses untuk menambah Pipe Line.`, "warning");
@@ -2752,6 +2823,12 @@ function exportToExcel() {
 }
 
 function handleExcelImport(e) {
+    const activeProject = projectsData[currentProjectIndex];
+    if (isProjectFullyLocked(activeProject)) {
+        e.target.value = '';
+        showModal('Project Terkunci', 'Cycle terakhir sudah Final Approved. Import dinonaktifkan agar data project tetap terkunci.', 'warning');
+        return;
+    }
     // Pengamanan tambahan: PM tidak boleh mengimpor Excel
     // meskipun fungsi dipanggil secara programatik.
     if (currentUser && currentUser.role === 'Project Manager') {
@@ -3243,6 +3320,44 @@ function showModal(title, text, type = "info") {
     document.getElementById('customModal').classList.remove('hidden');
 }
 
+function getRoleDisplay(role) {
+    const labels = {
+        'System Administrator': 'System Administrator',
+        'Process Engineer': 'Process Engineer (Originator)',
+        'Lead Process Engineer': 'Lead Process Engineer (Approver)',
+        'Piping Engineer': 'Piping Engineer (Contributor)',
+        'Lead Piping Engineer': 'Lead Piping Engineer (Approver)',
+        'Stress Engineer': 'Stress Engineer (Contributor)',
+        'Designer': 'Designer (Originator)',
+        'QA/QC': 'QA/QC & Material (Contributor)',
+        'Project Manager': 'Project Manager & Client (Approver)'
+    };
+    return labels[role] || role;
+}
+
+function renderTeamMembers() {
+    const tbody = document.getElementById('teamMembersBody');
+    const countEl = document.getElementById('teamMemberCount');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    accountsList.forEach((account) => {
+        const tr = document.createElement('tr');
+        const status = account.active === false ? 'Inactive' : 'Active';
+        tr.innerHTML = `
+            <td class="p-3 font-bold"></td>
+            <td class="p-3"></td>
+            <td class="p-3"></td>
+            <td class="p-3 text-center"><span class="px-2 py-0.5 rounded font-bold ${account.active === false ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}"></span></td>`;
+        const cells = tr.querySelectorAll('td');
+        cells[0].textContent = account.name;
+        cells[1].textContent = account.email;
+        cells[2].textContent = getRoleDisplay(account.role);
+        cells[3].querySelector('span').textContent = status;
+        tbody.appendChild(tr);
+    });
+    if (countEl) countEl.textContent = `${accountsList.length} Anggota`;
+}
+
 function openAddAccountModal() {
     document.getElementById('addAccountModal').classList.remove('hidden');
 }
@@ -3329,6 +3444,58 @@ function collectProjectRules() {
     }
     if (message) message.classList.add('hidden');
     return rules;
+}
+
+function isProjectFullyLocked(proj) {
+    if (!proj) return false;
+    const cycle = Number(proj.currentCycle || 1);
+    return proj.cycleCompleted === true || (
+        proj.finalApproval?.role === 'Project Manager' &&
+        proj.finalApproval?.status === 'Approved' &&
+        Number(proj.finalApproval?.cycle) === cycle &&
+        cycle >= Number((proj.cycleRules || []).length || cycle)
+    );
+}
+
+// Membuka cycle baru dengan workflow approval yang benar-benar baru, tanpa
+// menghapus histori cycle sebelumnya. Semua line tetap membawa histori,
+// tetapi bucket approval cycle baru kembali ke Draft/Pending.
+function activateNewCycle(proj, nextCycleNumber, sourceCycle) {
+    if (!proj) return;
+    const next = Math.max(1, Number(nextCycleNumber || 1));
+    const source = Math.max(1, Number(sourceCycle || next - 1));
+
+    (proj.lines || []).forEach(line => {
+        if (!line.approvalsByCycle || typeof line.approvalsByCycle !== 'object') {
+            line.approvalsByCycle = {};
+        }
+
+        const wasApprovedPreviously = Object.entries(line.approvalsByCycle).some(([cycleKey, approval]) =>
+            Number(cycleKey) <= source && approval?.pmApproval === 'Approved'
+        );
+
+        // Jangan pernah menimpa histori jika helper terpanggil ulang.
+        if (!line.approvalsByCycle[String(next)]) {
+            line.approvalsByCycle[String(next)] = {
+                processApproval: 'Pending',
+                pipingApproval: 'Pending',
+                pmApproval: 'Pending',
+                submissionStatus: 'Draft',
+                submitted: false,
+                submittedAt: null,
+                carriedForward: wasApprovedPreviously
+            };
+        }
+
+        if (wasApprovedPreviously) line.carriedForwardFromCycle = source;
+        else delete line.carriedForwardFromCycle;
+        line.pmRevisionRequested = false;
+    });
+
+    applyProjectCycle(proj, next - 1);
+    (proj.lines || []).forEach(line => syncCurrentCycleApproval(line, next));
+    proj.finalApproval = null;
+    proj.cycleCompleted = false;
 }
 
 function applyProjectCycle(proj, cycleIndex) {
@@ -3442,6 +3609,7 @@ function saveEditedProjectRules() {
         docInput?.focus();
         return;
     }
+
     const duplicateName = projectsData.some((p, i) => i !== idx && String(p.name || '').trim().toUpperCase() === newName);
     if (duplicateName) {
         showModal('Nama Project Sudah Ada', `Project "${newName}" sudah digunakan. Gunakan nama project yang berbeda.`, 'warning');
@@ -3449,43 +3617,72 @@ function saveEditedProjectRules() {
         return;
     }
 
-    const current = Number(proj.currentCycle || 1);
+    const oldRules = normalizeProjectRules(proj.cycleRules || defaultProjectRules());
+    const oldCurrent = Math.max(1, Number(proj.currentCycle || 1));
+    const wasLastCycleFinalApproved = isProjectFullyLocked(proj) || (
+        proj.finalApproval?.status === 'Approved' &&
+        Number(proj.finalApproval?.cycle) === oldCurrent &&
+        oldCurrent >= oldRules.length
+    );
     const historyCount = Array.isArray(proj.cycleHistory) ? proj.cycleHistory.length : 0;
+
     if (historyCount > 0) {
-        for (let i = 0; i < Math.min(current - 1, rules.length); i++) {
-            const oldRule = proj.cycleRules?.[i];
+        for (let i = 0; i < Math.min(oldCurrent - 1, rules.length); i++) {
+            const oldRule = oldRules[i];
             if (oldRule && (rules[i].revision !== oldRule.revision || rules[i].status !== oldRule.status)) {
                 showModal('Cycle Sudah Dikunci', `Cycle ${i + 1} sudah disetujui dan tidak dapat diubah lagi.`, 'warning');
                 return;
             }
         }
     }
-    if (rules.length < current) {
-        showModal('Setting Rule Tidak Valid', `Jumlah cycle tidak boleh kurang dari Cycle ${current} yang sedang aktif.`, 'warning');
+    if (rules.length < oldCurrent) {
+        showModal('Setting Rule Tidak Valid', `Jumlah cycle tidak boleh kurang dari Cycle ${oldCurrent} yang sedang aktif.`, 'warning');
         return;
     }
+
     const duplicateDoc = projectsData.some((p, i) => i !== idx && String(p.docNumber || '').replace(/\s+/g, '').toUpperCase() === newDocNumber);
     if (duplicateDoc) {
         showModal('Nomor Document Sudah Ada', `Nomor document "${newDocNumber}" sudah digunakan oleh project lain.`, 'warning');
         docInput?.focus();
         return;
     }
+
     proj.name = newName;
     proj.docNumber = newDocNumber;
     proj.cycleRules = normalizeProjectRules(rules);
-    const activeRule = getActiveCycleRule(proj);
-    if (activeRule) {
-        proj.revisionNumber = activeRule.revision;
-        proj.revisionStatus = activeRule.status;
-        proj.documentStatus = getRevisionOption(activeRule.status).label;
+
+    // Jika cycle terakhir sudah Final Approved lalu user menambahkan cycle baru,
+    // cycle baru langsung dibuka sebagai cycle aktif. Histori lama tetap immutable
+    // dan approval baru dimulai lagi dari Draft/Pending.
+    if (proj.cycleRules.length > oldRules.length && wasLastCycleFinalApproved) {
+        const nextCycle = oldRules.length + 1;
+        activateNewCycle(proj, nextCycle, oldCurrent);
+    } else {
+        const activeRule = getActiveCycleRule(proj);
+        if (activeRule) {
+            proj.revisionNumber = activeRule.revision;
+            proj.revisionStatus = activeRule.status;
+            proj.documentStatus = getRevisionOption(activeRule.status).label;
+        }
     }
+
+    saveApprovalState();
     saveRevisionState();
     closeAddProjectModal();
     editingProjectRulesIndex = null;
     renderDashboard();
-    showModal('Setting Rule Disimpan', `Setting Rule project "${String(proj.name || '').toUpperCase()}" berhasil diperbarui.`, 'success');
-}
 
+    if (proj.currentCycle > oldCurrent && wasLastCycleFinalApproved) {
+        const rule = getActiveCycleRule(proj);
+        showModal(
+            'Cycle Baru Aktif',
+            `Cycle ${proj.currentCycle} / Rev ${rule.revision} / ${getRevisionOption(rule.status).label} otomatis dibuka. Workflow approval diulang dari awal untuk cycle baru, sedangkan histori cycle sebelumnya tetap terkunci.`,
+            'success'
+        );
+    } else {
+        showModal('Setting Rule Disimpan', `Setting Rule project "${String(proj.name || '').toUpperCase()}" berhasil diperbarui.`, 'success');
+    }
+}
 function saveNewProject() {
     const name = document.getElementById('newProjectNameInput').value.trim().toUpperCase();
     const docNumber = document.getElementById('newProjectDocNumberInput')?.value.replace(/\s+/g, '').toUpperCase();
