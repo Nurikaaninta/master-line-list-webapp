@@ -1136,7 +1136,8 @@ function confirmApproveAllSelected(stage) {
 
     const eligible = selectedIndexes.filter(index => {
         const b = getLineApprovalBucket(proj.lines[index], proj.currentCycle);
-        return (stage === 'piping' ? b.pipingApproval : b.processApproval) !== 'Approved';
+        const isSubmitted = b?.submitted === true || !!b?.submittedAt;
+        return isSubmitted && (stage === 'piping' ? b.pipingApproval : b.processApproval) !== 'Approved';
     });
     if (!eligible.length) {
         showModal('Tidak Ada Data', 'Semua baris yang dipilih sudah Approved.', 'info');
@@ -1180,7 +1181,16 @@ function approveAllSelected(stage) {
         return;
     }
 
-    selectedIndexes.forEach(index => {
+    const eligibleIndexes = selectedIndexes.filter(index => {
+        const bucket = getLineApprovalBucket(proj.lines[index], proj.currentCycle);
+        return bucket?.submitted === true || !!bucket?.submittedAt;
+    });
+    if (!eligibleIndexes.length) {
+        showModal('Belum Bisa Approve', 'Line harus dikirim (Sent) oleh Engineer sebelum dapat di-approve.', 'warning');
+        return;
+    }
+
+    eligibleIndexes.forEach(index => {
         const line = proj.lines[index];
         const bucket = getLineApprovalBucket(line, proj.currentCycle);
         if (stage === 'piping') bucket.pipingApproval = 'Approved';
@@ -1197,7 +1207,7 @@ function approveAllSelected(stage) {
 
     showModal(
         'Approve All Berhasil',
-        `${selectedIndexes.length} baris berhasil di-approve oleh ${stage === 'piping' ? 'Lead Piping' : 'Lead Process'} pada Cycle ${proj.currentCycle} / Rev ${proj.revisionNumber}.`,
+        `${eligibleIndexes.length} baris berhasil di-approve oleh ${stage === 'piping' ? 'Lead Piping' : 'Lead Process'} pada Cycle ${proj.currentCycle} / Rev ${proj.revisionNumber}.`,
         'success'
     );
 }
@@ -1223,6 +1233,9 @@ function updateApprovalSelectionHeader(stage) {
 // wajib dari kedua bagian sudah terisi. Nilai valid seperti "-" / "N/A"
 // tetap dianggap terisi.
 const STRESS_ONLY_FIELDS = ['pwht', 'stress_critical', 'stress_calc_no'];
+// Stress Engineer dapat mengisi tiga kolom Stress/PWHT serta Remarks.
+// Remarks juga wajib dapat diisi oleh Process Engineer.
+const STRESS_EDITABLE_FIELDS = [...STRESS_ONLY_FIELDS, 'remarks'];
 
 const ENGINEER_REQUIRED_FIELDS = [
     'size', 'fluid_id', 'spec', 'seq', 'ins_type', 'ins_thick',
@@ -1240,12 +1253,18 @@ function isStressEngineer() {
     return currentUser?.role === 'Stress Engineer';
 }
 
-function isStressField(field) {
+function isStressOnlyField(field) {
     return STRESS_ONLY_FIELDS.includes(field);
 }
 
+function isStressEditableField(field) {
+    return STRESS_EDITABLE_FIELDS.includes(field);
+}
+
 function canEditTableField(field, canEditRow, stressCanEditRow = false) {
-    if (isStressField(field)) return !!stressCanEditRow;
+    // Kolom PWHT + Stress Analysis (kotak hitam) hanya dapat diisi oleh Stress Engineer.
+    // Process/Piping Engineer tidak boleh mendapatkan input aktif pada kolom tersebut.
+    if (isStressOnlyField(field)) return !!stressCanEditRow;
     return !!canEditRow;
 }
 
@@ -1360,7 +1379,7 @@ function renderTableRows(proj) {
     const isLeadPiping = currentUser && currentUser.role === 'Lead Piping Engineer';
     const isStress = isStressEngineer();
     const canEdit = currentUser && ['Process Engineer', 'Piping Engineer', 'System Administrator'].includes(currentUser.role);
-    const canEditRemarks = !!canEdit || !!isLeadProcessOnly;
+    const canEditRemarks = !!canEdit || !!isLeadProcessOnly || !!isStress;
     const isProcessLead = currentUser && ['Lead Process Engineer', 'System Administrator'].includes(currentUser.role);
     const isPipingLead = currentUser && ['Lead Piping Engineer', 'System Administrator'].includes(currentUser.role);
     const isManager = currentUser && ['Project Manager', 'System Administrator'].includes(currentUser.role);
@@ -1397,7 +1416,7 @@ function renderTableRows(proj) {
         // Stress Engineer hanya mengisi field Stress Analysis + PWHT.
         // Field lainnya tetap read-only untuk role Stress.
         const stressCanEditRow = !!isStress && bucket?.pmApproval !== 'Approved';
-        const canEditRemarksRow = canEditRow || !!isLeadProcessOnly;
+        const canEditRemarksRow = canEditRow || !!isLeadProcessOnly || !!stressCanEditRow;
         const normalizedSeq = String(line.seq ?? '').replace(/\D/g, '').trim();
         const isDuplicateSeq = index === duplicateSeqIndex && !!normalizedSeq && seqCounts[normalizedSeq] > 1;
         tr.className = 'hover:bg-blue-50/50 transition border-b border-slate-100';
@@ -1433,29 +1452,31 @@ function renderTableRows(proj) {
             }
         } else if (canApprove) {
             const leadAlreadyApproved = currentStatus === 'Approved';
+            const leadCanAct = submitted && !leadAlreadyApproved;
             actionHtml = `
                 <div class="approval-actions" aria-label="Approval actions">
                     <button type="button"
-                        onclick="${leadAlreadyApproved ? '' : `setApprovalStatus(${index}, 'Approved', '${approvalStage}')`}"
-                        class="approval-btn approval-btn-approve ${leadAlreadyApproved ? 'approval-btn-disabled' : ''}"
-                        title="${leadAlreadyApproved ? 'Sudah Approved' : 'Approve'}"
-                        aria-label="${leadAlreadyApproved ? 'Sudah Approved' : 'Approve'}"
-                        ${leadAlreadyApproved ? 'disabled' : ''}>
+                        onclick="${leadCanAct ? `setApprovalStatus(${index}, 'Approved', '${approvalStage}')` : ''}"
+                        class="approval-btn approval-btn-approve ${leadCanAct ? '' : 'approval-btn-disabled'}"
+                        title="${leadAlreadyApproved ? 'Sudah Approved' : (submitted ? 'Approve' : 'Belum Dikirim Engineer')}"
+                        aria-label="${leadAlreadyApproved ? 'Sudah Approved' : (submitted ? 'Approve' : 'Belum Dikirim Engineer')}"
+                        ${leadCanAct ? '' : 'disabled'}>
                         <i class="fa-solid fa-check"></i>
                     </button>
                     <button type="button"
-                        onclick="${leadAlreadyApproved ? '' : `setApprovalStatus(${index}, 'Rejected', '${approvalStage}')`}"
-                        class="approval-btn approval-btn-reject ${leadAlreadyApproved ? 'approval-btn-disabled' : ''}"
-                        title="${leadAlreadyApproved ? 'Terkunci setelah Approved' : 'Reject'}"
-                        aria-label="${leadAlreadyApproved ? 'Terkunci setelah Approved' : 'Reject'}"
-                        ${leadAlreadyApproved ? 'disabled' : ''}>
+                        onclick="${leadCanAct ? `setApprovalStatus(${index}, 'Rejected', '${approvalStage}')` : ''}"
+                        class="approval-btn approval-btn-reject ${leadCanAct ? '' : 'approval-btn-disabled'}"
+                        title="${leadAlreadyApproved ? 'Terkunci setelah Approved' : (submitted ? 'Reject' : 'Belum Dikirim Engineer')}"
+                        aria-label="${leadAlreadyApproved ? 'Terkunci setelah Approved' : (submitted ? 'Reject' : 'Belum Dikirim Engineer')}"
+                        ${leadCanAct ? '' : 'disabled'}>
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                     <button type="button"
-                        onclick="leadRequestRevision(${index}, '${approvalStage}')"
-                        class="approval-btn approval-btn-revision"
-                        title="Minta Revisi"
-                        aria-label="Minta Revisi">
+                        onclick="${submitted ? `leadRequestRevision(${index}, '${approvalStage}')` : ''}"
+                        class="approval-btn approval-btn-revision ${submitted ? '' : 'approval-btn-disabled'}"
+                        title="${submitted ? 'Minta Revisi' : 'Belum Dikirim Engineer'}"
+                        aria-label="${submitted ? 'Minta Revisi' : 'Belum Dikirim Engineer'}"
+                        ${submitted ? '' : 'disabled'}>
                         <i class="fa-solid fa-rotate-left"></i>
                     </button>
                 </div>`;
@@ -1495,7 +1516,7 @@ function renderTableRows(proj) {
             <td class="freeze-col freeze-col-5"><input type="number" min="0" step="1" inputmode="numeric" value="${String(line.seq ?? '').replace(/\D/g, '')}" oninput="this.value=this.value.replace(/\D/g,''); updateLineField(${index}, 'seq', this.value)" ${fieldDisabledAttr('seq', canEditRow)} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
             <td class="freeze-col freeze-col-6"><input type="text" value="${escapeHtmlAttr(line.ins_type)}" oninput="this.value=this.value.toUpperCase(); updateLineField(${index}, 'ins_type', this.value)" ${fieldDisabledAttr('ins_type', canEditRow)} class="w-full px-1.5 py-1 border rounded text-xs uppercase"></td>
-            <td class="freeze-col freeze-col-7"><input type="number" min="0" step="any" inputmode="decimal" value="${String(line.ins_thick ?? '').replace(/[^0-9.]/g, '')}" oninput="this.value=this.value.replace(/[^0-9.]/g,''); updateLineField(${index}, 'ins_thick', this.value)" ${fieldDisabledAttr('ins_thick', canEditRow)} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
+            <td class="freeze-col freeze-col-7"><input type="text" value="${escapeHtmlAttr(String(line.ins_thick ?? ''))}" oninput="updateLineField(${index}, 'ins_thick', this.value)" ${fieldDisabledAttr('ins_thick', canEditRow)} class="w-full px-1.5 py-1 border rounded text-xs font-mono"></td>
             
             <td>
     <input
@@ -1664,16 +1685,16 @@ function updateLineField(index, field, val) {
     // Field Stress/PWHT adalah milik Stress Engineer saja.
     // Guard ini tetap berlaku walaupun seseorang mencoba memanggil
     // updateLineField() langsung dari browser console.
-    if (isStressField(field) && currentUser?.role !== 'Stress Engineer') {
+    if (isStressOnlyField(field) && currentUser?.role !== 'Stress Engineer') {
         renderDashboard();
         showModal('Akses Ditolak', 'Kolom PWHT dan Stress Analysis hanya dapat diisi oleh Stress Engineer.', 'warning');
         return;
     }
 
-    // Stress Engineer hanya boleh mengubah field milik Stress.
-    if (currentUser?.role === 'Stress Engineer' && !isStressField(field)) {
+    // Stress Engineer hanya boleh mengubah PWHT, Stress Analysis, dan Remarks.
+    if (currentUser?.role === 'Stress Engineer' && !isStressEditableField(field)) {
         renderDashboard();
-        showModal('Akses Ditolak', 'Stress Engineer hanya dapat mengisi PWHT, Stress Analysis Criticality, dan Stress Analysis Calculation Number.', 'warning');
+        showModal('Akses Ditolak', 'Stress Engineer hanya dapat mengisi PWHT, Stress Analysis Criticality, Stress Analysis Calculation Number, dan Remarks.', 'warning');
         return;
     }
 
@@ -2110,6 +2131,11 @@ function setApprovalStatus(index, status, stage = 'process') {
     }
 
     const bucket = getLineApprovalBucket(line, proj.currentCycle);
+    const isSubmitted = bucket?.submitted === true || !!bucket?.submittedAt;
+    if (!isSubmitted) {
+        showModal('Belum Bisa Approve', 'Line harus dikirim (Sent) oleh Engineer sebelum dapat di-approve atau direvisi oleh Lead.', 'warning');
+        return;
+    }
     if (stage === 'piping') {
         bucket.pipingApproval = status;
     } else {
