@@ -34,7 +34,7 @@ const REVISION_OPTIONS = [
     { code: 'IFI', label: 'Issued for Information', format: '0, 1, 2, 3, ...; n', defaultNumber: '0', status: 'Issued for Information' }
 ];
 const REVISION_STORAGE_KEY = 'masterLineListRevisionState_v3_clean_0901';
-const APPROVAL_STORAGE_KEY = 'masterLineListApprovalState_v4_clean_0901';
+const APPROVAL_STORAGE_KEY = 'masterLineListApprovalState_v5_cycle_history_persistent_0903';
 
 function loadApprovalState() {
     try { return JSON.parse(localStorage.getItem(APPROVAL_STORAGE_KEY) || '{}'); }
@@ -204,6 +204,7 @@ function getConfiguredCycleDisplay(proj) {
 }
 
 function hydrateRevisionState() {
+    const fallbackCode = 'IFR';
     const saved = loadRevisionState();
     projectsData.forEach((p, index) => {
         // Jika project memiliki Setting Rule, rule project adalah satu-satunya sumber
@@ -337,11 +338,9 @@ projectsData.forEach(project => {
     project.docNumber = String(project.docNumber ?? '').trim();
     project.lines.forEach((line, index) => {
         line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
-        if (line.ins_thick === '-' || line.ins_thick === null || line.ins_thick === undefined) {
-            line.ins_thick = '';
-        } else {
-            line.ins_thick = String(line.ins_thick).replace(/[^0-9.]/g, '');
-        }
+        // Insulation Thickness boleh berisi apa pun, termasuk "-".
+        // Nilai "-" adalah nilai valid dan tidak boleh dikosongkan otomatis.
+        line.ins_thick = String(line.ins_thick ?? '').trim();
         line.seq = String(line.seq ?? '').replace(/\D/g, '');
         line.spec = String(line.spec ?? '').trim().toUpperCase();
         line.service = String(line.service ?? '').trim();
@@ -790,10 +789,13 @@ function buildCompleteLineNo(line, lines = null, index = -1) {
     const insType = String(line?.ins_type ?? "").trim().toUpperCase();
     const insThick = String(line?.ins_thick ?? "").trim();
 
+    // Jika Insulation Type = "-", data insulation tidak dipakai pada
+    // Complete Line No. Nilai Thickness "-" juga diabaikan.
+    // Thickness selain "-" boleh berupa huruf, angka, atau tanda apa pun.
     if (insType && insType !== "-") {
         result += `-${insType}`;
-        if (insThick && insThick !== "-" && /^\d+(?:[.,]\d+)?$/.test(insThick)) {
-            result += `-${insThick.replace(',', '.')}`;
+        if (insThick && insThick !== "-") {
+            result += `-${insThick}`;
         }
     }
     return result;
@@ -857,33 +859,102 @@ function normalizeMultiValue(value) {
     return String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 }
 
-function getCompletedCycleApprovalInfo(proj, line, stage) {
+function getCompletedCycleApprovalInfos(proj, line, stage) {
     const currentCycle = Number(proj?.currentCycle || 1);
-    if (currentCycle <= 1) return null;
+    if (currentCycle <= 1 || !line) return [];
 
-    const completedCycle = currentCycle - 1;
-    const history = (proj?.cycleHistory || []).find(h => Number(h.cycle) === completedCycle);
-    const bucket = line?.approvalsByCycle?.[String(completedCycle)];
-    const stageKey = stage === 'piping' ? 'pipingApproval' : 'processApproval';
+    const historyItems = Array.isArray(proj?.cycleHistory) ? proj.cycleHistory : [];
+    const snapshots = Array.isArray(proj?.cycleSnapshots) ? proj.cycleSnapshots : [];
+    const rules = Array.isArray(proj?.cycleRules) ? proj.cycleRules : [];
+    const lineId = String(line.id ?? '');
 
-    // A line yang ditambahkan setelah cycle sebelumnya selesai tetap dianggap
-    // sudah melewati cycle tersebut. Histori final PM menjadi acuan label yang tampil.
-    const wasApproved = bucket?.[stageKey] === 'Approved' || history?.[stageKey] === 'Approved';
-    if (!wasApproved || !history) return null;
-
-    const revision = String(history.revision || '').toUpperCase();
-    // Setelah PM final approval, hasil cycle adalah IFU. Gunakan hasil final ini
-    // sebagai label histori agar tidak berubah saat cycle berikutnya dibuka.
-    // Histori cycle sebelumnya harus mengikuti STATUS yang dipilih user pada
-    // Setting Rules cycle tersebut. finalStatus hanya fallback untuk data lama.
-    const previousStatus = String(history.configuredStatus || history.finalStatus || '').trim().toUpperCase();
-    if (!previousStatus) return null;
-    return {
-        cycle: completedCycle,
-        revision,
-        status: previousStatus,
-        label: `Approved Rev ${revision} ${previousStatus}`
+    // PENTING: histori approval adalah histori per-cycle yang immutable.
+    // Jangan pernah menghapus badge cycle sebelumnya hanya karena cycle baru aktif.
+    // Sumber utama: snapshot cycle yang sudah final-approved PM. approvalsByCycle
+    // tetap dipakai sebagai fallback agar state lama/localStorage tetap terbaca.
+    const findSnapshotLine = (completedCycle) => {
+        const snapshot = snapshots.find(item => Number(item?.cycle || 0) === completedCycle);
+        if (!snapshot || !Array.isArray(snapshot.lines)) return null;
+        let snapshotLine = lineId
+            ? snapshot.lines.find(l => String(l?.id ?? '') === lineId)
+            : null;
+        if (!snapshotLine) {
+            snapshotLine = snapshot.lines.find(l =>
+                String(l?.seq ?? '') === String(line?.seq ?? '') &&
+                String(l?.fluid_id ?? '') === String(line?.fluid_id ?? '') &&
+                String(l?.spec ?? '') === String(line?.spec ?? '')
+            );
+        }
+        return snapshotLine || null;
     };
+
+    const results = [];
+    for (let completedCycle = 1; completedCycle < currentCycle; completedCycle++) {
+        const snapshot = snapshots.find(item => Number(item?.cycle || 0) === completedCycle) || null;
+        const history = historyItems.find(item => Number(item?.cycle || 0) === completedCycle) || null;
+        const snapshotLine = findSnapshotLine(completedCycle);
+        const liveBucket = line?.approvalsByCycle?.[String(completedCycle)] || null;
+        const snapshotBucket = snapshotLine?.approvalsByCycle?.[String(completedCycle)] || null;
+
+        // Line harus memang sudah ada pada cycle tersebut. Jika snapshot cycle
+        // tersedia, snapshot adalah sumber kebenaran (immutable). Jangan memakai
+        // live bucket sebagai bukti keberadaan karena versi lama sempat mengisi
+        // approval cycle sebelumnya ke line yang BARU dibuat pada cycle berikutnya.
+        // Fallback live bucket hanya dipakai untuk data lama yang belum memiliki
+        // snapshot cycle sama sekali.
+        const snapshotExistsForCycle = !!snapshot;
+        const lineExistedInCycle = snapshotExistsForCycle
+            ? !!snapshotLine
+            : !!liveBucket;
+        if (!lineExistedInCycle) continue;
+
+        // Jika cycle sudah tercatat Final Approved oleh PM, histori cycle tersebut
+        // harus tetap muncul untuk line yang ada pada cycle itu. Ini mencegah badge
+        // Cycle 1/2/3 hilang ketika bucket line lama tidak lagi tersinkron sempurna.
+        const cycleFinalApproved = history?.pmApproval === 'Approved' ||
+            snapshotBucket?.pmApproval === 'Approved' ||
+            snapshotLine?.pmApproval === 'Approved' ||
+            liveBucket?.pmApproval === 'Approved';
+        if (!cycleFinalApproved) continue;
+
+        const rule = rules[completedCycle - 1] || {};
+        const revision = String(
+            history?.revision || snapshot?.revision || rule.revision || ''
+        ).trim().toUpperCase();
+        const previousStatus = String(
+            history?.configuredStatus || history?.finalStatus || snapshot?.status || rule.status || ''
+        ).trim().toUpperCase();
+        if (!revision || !previousStatus) continue;
+
+        results.push({
+            cycle: completedCycle,
+            revision,
+            status: previousStatus,
+            label: `Approved Rev ${revision} ${previousStatus}`
+        });
+    }
+
+    return results;
+}
+
+// Kompatibilitas untuk bagian workflow lama yang hanya membutuhkan histori terakhir.
+function getCompletedCycleApprovalInfo(proj, line, stage) {
+    const infos = getCompletedCycleApprovalInfos(proj, line, stage);
+    return infos.length ? infos[infos.length - 1] : null;
+}
+
+// True jika line yang sama sudah pernah Final Approved PM pada cycle sebelumnya.
+// Dipakai khusus untuk menjaga Process Approval tetap ada dan Aksi Engineer tetap
+// abu-abu/nonaktif ketika Cycle 2, 3, dst. dibuka.
+function hasPriorFinalApproval(proj, line) {
+    const currentCycle = Number(proj?.currentCycle || 1);
+    if (currentCycle <= 1 || !line) return false;
+    if (getCompletedCycleApprovalInfos(proj, line, 'process').length > 0) return true;
+
+    const buckets = line?.approvalsByCycle || {};
+    return Object.entries(buckets).some(([cycleKey, approval]) =>
+        Number(cycleKey) < currentCycle && approval?.pmApproval === 'Approved'
+    );
 }
 
 function recalculateLeadWorkflowStatus(bucket) {
@@ -912,7 +983,8 @@ function getApprovalDisplay(line, proj, stage) {
     const configuredDisplay = getConfiguredCycleDisplay(proj);
     const currentRevision = configuredDisplay.revision;
     const currentStatusCode = configuredDisplay.status;
-    const previous = getCompletedCycleApprovalInfo(proj, line, stage);
+    const previousApprovals = getCompletedCycleApprovalInfos(proj, line, stage);
+    const previous = previousApprovals.length ? previousApprovals[previousApprovals.length - 1] : null;
     // Gunakan status pada bucket DAN line legacy agar status tetap tampil
     // meskipun data approval berasal dari state versi sebelumnya.
     const effectiveSubmissionStatus = bucket?.submissionStatus || line?.submissionStatus || '';
@@ -943,13 +1015,28 @@ function getApprovalDisplay(line, proj, stage) {
         bucket.submissionStatus = 'Waiting Approval PM';
     }
     const isProcessEngineer = currentUser?.role === 'Process Engineer';
+    // Yang dipertahankan di kolom Process Approval adalah approval pertama
+    // yang sudah final untuk line tersebut (misalnya Cycle 1). Ini menjaga
+    // approval Cycle 1 tetap terlihat pada Cycle 2/3 berikutnya, tanpa
+    // menumpuk badge final dari setiap cycle sebelumnya.
+    const retainedPreviousApproval = previousApprovals.length ? previousApprovals[0] : null;
+    const previousBadges = retainedPreviousApproval
+        ? `<span class="approval-status-badge approval-approved">${escapeHtml(retainedPreviousApproval.label)}</span>`
+        : '';
+    const previousBadge = previous
+        ? `<span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>`
+        : '';
+    // Histori approval yang dipertahankan tetap tampil untuk Process Engineer,
+    // Lead, dan Project Manager. Badge cycle sebelumnya yang lebih baru tidak
+    // ditumpuk kembali pada Cycle berikutnya.
+    const withPreviousBadge = (html) => `${previousBadges}${html}`;
     const carriedForward = Number(line?.carriedForwardFromCycle || 0) === Math.max(0, cycle - 1) || bucket?.carriedForward === true;
 
     // Setelah final approval sebuah cycle, line yang sama dibawa ke cycle berikutnya.
     // Sebelum line tersebut dikirim ulang, Process Approval menampilkan HASIL APPROVAL
     // cycle sebelumnya (contoh: Approved Rev A IFR), bukan status target Rev B IFA.
-    if (!submitted && carriedForward && previous) {
-        return `<span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>`;
+    if (!submitted && carriedForward && previousApprovals.length) {
+        return previousBadges;
     }
 
     // Baris baru/draft belum dikirim: kolom Process Approval sengaja kosong.
@@ -965,31 +1052,35 @@ function getApprovalDisplay(line, proj, stage) {
     // pada data yang belum dikirim ke Lead. Role approval lain tidak melihat
     // placeholder tersebut agar status tidak bertumpuk/menyesatkan.
     if (pmApproved) {
-        return `<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+        // Setelah PM Final Approve, tampilkan SEMUA approval dari cycle yang
+        // sudah selesai (Cycle 1, 2, 3, dst.) ditambah approval cycle aktif.
+        // Ini hanya mengubah tampilan histori Process Approval dan tidak
+        // mengubah alur workflow cycle berikutnya.
+        return `${previousBadges}<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
     // PM memiliki dua tahap: setelah Lead selesai, line siap di-approve PM;
     // setelah PM melakukan Approve All/per-line approval, line masuk tahap
     // Ready for Final Approval dan baru menjadi Approved saat Final Approval.
     if (bucket?.pmApproval === 'Ready for Final Approval') {
         if (currentUser?.role === 'Project Manager' || currentUser?.role === 'System Administrator') {
-            return `<span class="approval-status-badge approval-pm-action">Ready for Final Approval</span>`;
+            return withPreviousBadge(`<span class="approval-status-badge approval-pm-action">Ready for Final Approval</span>`);
         }
-        return `<span class="approval-status-badge approval-pending">Ready for Final Approval</span>`;
+        return withPreviousBadge(`<span class="approval-status-badge approval-pending">Ready for Final Approval</span>`);
     }
     if (bothLeadsApproved) {
         // Setelah Lead Process + Lead Piping selesai, PM mendapat status
         // yang sama dengan badge di area bawah: Ready to Approval.
         if (currentUser?.role === 'Project Manager' || currentUser?.role === 'System Administrator') {
-            return `<span class="approval-status-badge approval-pm-action">Ready to Approval</span>`;
+            return withPreviousBadge(`<span class="approval-status-badge approval-pm-action">Ready to Approval</span>`);
         }
-        return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
+        return withPreviousBadge(`<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`);
     }
 
     // Jika Lead pada discipline yang sedang dilihat sudah approve, tetapi
     // Lead discipline lain belum, status tetap menunjukkan bahwa tahap PM
     // belum final dan masih menunggu alur approval berikutnya.
     if ((stage === 'process' && processLeadApproved) || (stage === 'piping' && pipingLeadApproved)) {
-        return `<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`;
+        return withPreviousBadge(`<span class="approval-status-badge approval-pending">Waiting Approval PM</span>`);
     }
     if (submitted) {
         // IMPORTANT: approval by either Lead must NOT finalize the line.
@@ -1002,20 +1093,20 @@ function getApprovalDisplay(line, proj, stage) {
         if (currentStatus === 'Deleted') {
             return `<span class="approval-status-badge approval-deleted">Deleted Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
         }
-        return `<span class="approval-status-badge approval-pending">Waiting Approval Lead &amp; PM</span>`;
+        return withPreviousBadge(`<span class="approval-status-badge approval-pending">Waiting Approval Lead &amp; PM</span>`);
     }
 
     // Saat cycle baru sudah aktif, line lama yang belum dikirim ulang harus
     // menunjukkan target revisi/cycle baru di kolom Process Approval.
     // Baris baru tetap Draft dan sengaja ditangani di atas agar kolom kosong.
     if (cycle > 1 && currentStatus === 'Pending') {
-        return `<span class="approval-status-badge approval-pm-action">Approve Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+        return withPreviousBadge(`<span class="approval-status-badge approval-pm-action">Approve Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`);
     }
 
     // Jika line baru mewarisi approval cycle sebelumnya, tampilkan histori saja.
     // Jangan menambahkan "Pending Approval (sementara)" di bawahnya.
-    if (previous && currentStatus === 'Pending') {
-        return `<span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>`;
+    if (previousApprovals.length && currentStatus === 'Pending') {
+        return previousBadges;
     }
 
     if (currentStatus === 'Rejected') {
@@ -1234,14 +1325,14 @@ function updateApprovalSelectionHeader(stage) {
 // tetap dianggap terisi.
 const STRESS_ONLY_FIELDS = ['pwht', 'stress_critical', 'stress_calc_no'];
 // Stress Engineer dapat mengisi tiga kolom Stress/PWHT serta Remarks.
-// Remarks juga wajib dapat diisi oleh Process Engineer.
+// Remarks dapat diisi oleh Process Engineer dan Stress Engineer, tetapi tidak wajib untuk Sent.
 const STRESS_EDITABLE_FIELDS = [...STRESS_ONLY_FIELDS, 'remarks'];
 
 const ENGINEER_REQUIRED_FIELDS = [
     'size', 'fluid_id', 'spec', 'seq', 'ins_type', 'ins_thick',
     'pid', 'from', 'to', 'service', 'phase', 'mass', 'vol',
     'press_op', 'press_des', 'temp_op', 'temp_des', 'density', 'visc',
-    'nde_rt', 'nde_pt', 'test_med', 'test_press', 'painting', 'remarks'
+    'nde_rt', 'nde_pt', 'test_med', 'test_press', 'painting'
 ];
 
 // Stress/PWHT dikerjakan oleh Stress Engineer, tetapi tetap menjadi bagian
@@ -1285,29 +1376,57 @@ function getMissingSendFields(line) {
 function isLineReadyForSend(line) {
     // Complete Line No. dibuat otomatis. Sent hanya hijau jika SEMUA field
     // input wajib, termasuk PWHT + Stress Analysis, sudah terisi.
+    // Remarks bersifat opsional untuk Process Engineer maupun Stress Engineer.
     return getMissingSendFields(line).length === 0;
 }
 
 function sentButtonHtml(index, line, submitted) {
-    if (submitted) {
-        return `<span class="text-[10px] text-slate-400 font-semibold">Terkirim</span>`;
+    const proj = projectsData[currentProjectIndex];
+    const currentCycle = Number(proj?.currentCycle || 1);
+    const bucket = getLineApprovalBucket(line, currentCycle);
+    const alreadySubmitted = submitted || bucket?.submitted === true || !!bucket?.submittedAt ||
+        ['Waiting Approval Lead & PM', 'Waiting Approval PM', 'Approved'].includes(bucket?.submissionStatus);
+
+    // Setelah line terkirim, Sent dan Delete harus tetap terlihat tetapi berwarna
+    // abu-abu/nonaktif. Ini juga berlaku pada cycle berikutnya setelah line cycle
+    // aktif dikirim. Workflow cycle baru tetap dapat dimulai dengan Sent selama line
+    // pada cycle tersebut masih Draft.
+    if (alreadySubmitted) {
+        return `
+            <button type="button" class="revision-submit-btn sent-btn-disabled"
+                title="Data sudah terkirim" aria-label="Sent" disabled aria-disabled="true">
+                <i class="fa-solid fa-paper-plane"></i> Sent
+            </button>
+            <button type="button" class="px-2 py-1 rounded text-xs sent-btn-disabled"
+                title="Delete dinonaktifkan karena data sudah terkirim" disabled aria-disabled="true">
+                <i class="fa-solid fa-trash"></i>
+            </button>`;
     }
 
+    // Aturan yang sudah ada tetap dipertahankan: Delete Process Engineer
+    // terkunci pada Cycle 2 dan seterusnya. Sent tidak dikunci agar tahapan
+    // Cycle 1 dapat benar-benar diulang pada Cycle 2, 3, dan seterusnya.
+    const processDeleteLocked = currentUser?.role === 'Process Engineer' && currentCycle >= 2;
     const ready = isLineReadyForSend(line);
+    const sentDisabled = !ready;
     const title = ready
-        ? 'Kirim data ke Lead'
+        ? `Kirim data untuk Cycle ${currentCycle}`
         : 'Lengkapi semua kolom data terlebih dahulu';
 
     return `
         <button type="button"
-            onclick="${ready ? `sendLineToLead(${index})` : `showSendValidation(${index})`}"
-            class="revision-submit-btn ${ready ? '' : 'sent-btn-disabled'}"
+            onclick="${sentDisabled ? `showSendValidation(${index})` : `sendLineToLead(${index})`}"
+            class="revision-submit-btn ${sentDisabled ? 'sent-btn-disabled' : ''}"
             title="${title}"
             aria-label="Sent"
-            ${ready ? '' : 'aria-disabled="true"'}>
+            ${sentDisabled ? 'disabled aria-disabled="true"' : ''}>
             <i class="fa-solid fa-paper-plane"></i> Sent
         </button>
-        <button type="button" onclick="deleteLineRow(${index})" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded text-xs" title="Hapus baris">
+        <button type="button"
+            onclick="${processDeleteLocked ? '' : `deleteLineRow(${index})`}"
+            class="px-2 py-1 rounded text-xs ${processDeleteLocked ? 'sent-btn-disabled' : 'bg-rose-100 hover:bg-rose-200 text-rose-700'}"
+            title="${processDeleteLocked ? `Delete dinonaktifkan untuk Process Engineer pada Cycle ${currentCycle}` : 'Hapus baris'}"
+            ${processDeleteLocked ? 'disabled aria-disabled="true"' : ''}>
             <i class="fa-solid fa-trash"></i>
         </button>`;
 }
@@ -1330,7 +1449,7 @@ function showSendValidation(index) {
         nde_rt: 'NDE RT', nde_pt: 'NDE PT', test_med: 'Test Medium',
         test_press: 'Test Pressure', painting: 'Painting Code',
         pwht: 'PWHT', stress_critical: 'Stress Analysis Criticality',
-        stress_calc_no: 'Stress Analysis Calculation Number', remarks: 'Remarks'
+        stress_calc_no: 'Stress Analysis Calculation Number'
     };
 
     const names = missing.map(field => labels[field] || field).join(', ');
@@ -1481,7 +1600,22 @@ function renderTableRows(proj) {
                     </button>
                 </div>`;
         } else if (isStageEngineer) {
-            if (rowInEditMode) {
+            // Jika PM sudah Final Approved pada cycle aktif, line tersebut sudah
+            // final untuk cycle itu. Sent dan Delete harus tetap terlihat namun
+            // abu-abu/nonaktif pada Cycle 1, 2, 3, dan seterusnya.
+            if (bucket?.pmApproval === 'Approved') {
+                actionHtml = `
+                    <div class="approval-actions">
+                        <button type="button" class="revision-submit-btn sent-btn-disabled"
+                            title="Data sudah Approved oleh Project Manager pada Cycle ${Number(proj.currentCycle || 1)}" aria-label="Sent" disabled aria-disabled="true">
+                            <i class="fa-solid fa-paper-plane"></i> Sent
+                        </button>
+                        <button type="button" class="px-2 py-1 rounded text-xs sent-btn-disabled"
+                            title="Delete dinonaktifkan karena data sudah Approved oleh Project Manager" disabled aria-disabled="true">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>`;
+            } else if (rowInEditMode) {
                 const readyForResubmit = isLineReadyForSend(line);
                 actionHtml = `
                     <div class="approval-actions engineer-revision-actions">
@@ -1501,10 +1635,36 @@ function renderTableRows(proj) {
             } else if (submitted) {
                 actionHtml = `<span class="text-[10px] text-slate-400 font-semibold">Terkirim</span>`;
             } else {
-                actionHtml = `
-                    <div class="approval-actions">
-                        ${sentButtonHtml(index, line, submitted)}
-                    </div>`;
+                // Line yang dibawa dari cycle sebelumnya dan sudah Final Approved PM
+                // tetap menampilkan status approval sebelumnya. Karena line tersebut
+                // sudah pernah terkirim/final approved, tombol Sent dan Delete
+                // ditampilkan abu-abu/nonaktif seperti data terkirim.
+                const previousCycleApproval = getCompletedCycleApprovalInfo(proj, line, approvalStage);
+                const priorFinalApproved = hasPriorFinalApproval(proj, line);
+                const carriedApprovedLine = Number(proj.currentCycle || 1) > 1 &&
+                    (priorFinalApproved || !!previousCycleApproval) &&
+                    bucket?.submitted !== true && !bucket?.submittedAt &&
+                    (bucket?.carriedForward === true ||
+                     Number(line?.carriedForwardFromCycle || 0) > 0 ||
+                     priorFinalApproved);
+                if (carriedApprovedLine) {
+                    actionHtml = `
+                        <div class="approval-actions">
+                            <button type="button" class="revision-submit-btn sent-btn-disabled"
+                                title="Data sudah terkirim pada cycle sebelumnya" aria-label="Sent" disabled aria-disabled="true">
+                                <i class="fa-solid fa-paper-plane"></i> Sent
+                            </button>
+                            <button type="button" class="px-2 py-1 rounded text-xs sent-btn-disabled"
+                                title="Delete dinonaktifkan karena data sudah terkirim" disabled aria-disabled="true">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>`;
+                } else {
+                    actionHtml = `
+                        <div class="approval-actions">
+                            ${sentButtonHtml(index, line, submitted)}
+                        </div>`;
+                }
             }
         }
 
@@ -1655,15 +1815,28 @@ function refreshSentButtonForRow(index) {
     const button = row.querySelector('.revision-submit-btn');
     if (!button || button.textContent.includes('Kirim Ulang')) return;
 
+    const bucket = getLineApprovalBucket(line, Number(proj.currentCycle || 1));
+    const alreadySubmitted = bucket?.submitted === true || !!bucket?.submittedAt ||
+        ['Waiting Approval Lead & PM', 'Waiting Approval PM', 'Approved'].includes(bucket?.submissionStatus);
+    if (alreadySubmitted) {
+        button.classList.add('sent-btn-disabled');
+        button.setAttribute('title', 'Data sudah terkirim');
+        button.removeAttribute('onclick');
+        button.setAttribute('disabled', 'disabled');
+        button.setAttribute('aria-disabled', 'true');
+        return;
+    }
     const ready = isLineReadyForSend(line);
     button.classList.toggle('sent-btn-disabled', !ready);
     button.setAttribute('title', ready ? 'Kirim data ke Lead' : 'Lengkapi semua kolom data termasuk PWHT dan Stress Analysis');
     if (ready) {
         button.setAttribute('onclick', `sendLineToLead(${index})`);
         button.removeAttribute('aria-disabled');
+        button.removeAttribute('disabled');
     } else {
         button.setAttribute('onclick', `showSendValidation(${index})`);
         button.setAttribute('aria-disabled', 'true');
+        button.setAttribute('disabled', 'disabled');
     }
 }
 
@@ -1715,7 +1888,8 @@ function updateLineField(index, field, val) {
     }
 
     if (field === 'ins_thick') {
-        val = String(val ?? '').replace(/[^0-9.]/g, '');
+        // Thickness [mm] menerima huruf, angka, tanda, dan nilai "-".
+        val = String(val ?? '');
     }
 
     line[field] = val;
@@ -1834,21 +2008,13 @@ function addLineRow() {
         approvalsByCycle: {}
     });
 
-    // Jika project sudah masuk cycle berikutnya, baris baru mewarisi seluruh
-    // approval cycle yang telah selesai. Jadi baris baru tidak "mundur" menjadi
-    // Pending pada cycle sebelumnya.
+    // Line yang BARU dibuat pada cycle aktif tidak boleh mewarisi approval
+    // cycle sebelumnya. Hanya line yang memang ada pada cycle lama yang boleh
+    // menampilkan histori approval Cycle 1, Cycle 2, dan seterusnya.
+    // Dengan demikian Process Approval pada line baru tidak muncul sebagai
+    // "Approved Rev ..." secara salah.
     const newLine = proj.lines[proj.lines.length - 1];
     const activeCycle = Number(proj.currentCycle || 1);
-    const completedHistory = Array.isArray(proj.cycleHistory) ? proj.cycleHistory : [];
-    for (let cycle = 1; cycle < activeCycle; cycle++) {
-        const completed = completedHistory.find(h => Number(h.cycle) === cycle);
-        if (completed?.pmApproval === 'Approved' || completed?.finalStatus === 'IFU') {
-            newLine.approvalsByCycle[String(cycle)] = {
-                processApproval: 'Approved',
-                pipingApproval: 'Approved'
-            };
-        }
-    }
 
     getLineApprovalBucket(newLine, activeCycle);
     syncCurrentCycleApproval(newLine, activeCycle);
@@ -2037,6 +2203,8 @@ function sendLineToLead(index) {
         showModal('Akses Ditolak', 'Hanya Engineer yang dapat mengirim data ke Lead.', 'warning');
         return;
     }
+    // Cycle 2, 3, dan seterusnya mengulang tahapan Cycle 1. Karena itu Engineer
+    // tetap dapat mengirim line yang sudah lengkap pada setiap cycle.
     const missing = getMissingSendFields(line);
     if (missing.length) {
         showSendValidation(index);
@@ -2064,6 +2232,19 @@ function sendLineToLead(index) {
 }
 
 function deleteLineRow(index) {
+    const proj = projectsData[currentProjectIndex];
+    const line = proj?.lines?.[index];
+    const bucket = line ? getLineApprovalBucket(line, Number(proj?.currentCycle || 1)) : null;
+    const alreadySubmitted = bucket?.submitted === true || !!bucket?.submittedAt ||
+        ['Waiting Approval Lead & PM', 'Waiting Approval PM', 'Approved'].includes(bucket?.submissionStatus);
+    if (alreadySubmitted) {
+        showModal('Akses Dikunci', 'Data yang sudah terkirim tidak dapat dihapus pada cycle aktif.', 'warning');
+        return;
+    }
+    if (currentUser?.role === 'Process Engineer' && Number(proj?.currentCycle || 1) >= 2) {
+        showModal('Akses Dikunci', `Tombol Delete Process Engineer dinonaktifkan pada Cycle ${proj.currentCycle}.`, 'warning');
+        return;
+    }
     if (currentUser && currentUser.role === 'Lead Process Engineer') {
         showModal("Akses Ditolak", "Lead Process Engineer tidak memiliki akses untuk menghapus Pipe Line.", "warning");
         return;
@@ -2419,8 +2600,16 @@ function managerFinalApproval() {
             // Process Approval langsung menampilkan hasil revisi berikutnya
             // (mis. Approved Rev B IFR). Line baru tetap Draft dan harus
             // melalui workflow approval dari awal.
+            // Line yang sudah Final Approved pada cycle mana pun sebelumnya harus
+            // tetap dianggap carried-forward pada cycle berikutnya. Jangan hanya
+            // mengecek approval cycle aktif, karena line Cycle 1 yang tidak ikut
+            // submit di Cycle 2 tetap harus mempertahankan histori dan Aksi abu-abu
+            // saat Cycle 3 (dan seterusnya) dibuka.
             const wasFullyApproved = line.pmApproval === 'Approved' ||
-                (line.processApproval === 'Approved' && line.pipingApproval === 'Approved');
+                (line.processApproval === 'Approved' && line.pipingApproval === 'Approved') ||
+                Object.entries(line.approvalsByCycle || {}).some(([cycleKey, approval]) =>
+                    Number(cycleKey) <= oldCycle && approval?.pmApproval === 'Approved'
+                );
 
             // Approval cycle baru selalu dimulai dari Draft. Jika line sudah fully
             // approved pada cycle sebelumnya, tandai sebagai carried-forward agar
@@ -2618,7 +2807,8 @@ function handleExcelImport(e) {
 
                 importedLines.forEach(line => {
                     line.ins_type = String(line.ins_type ?? '').trim().toUpperCase();
-                    line.ins_thick = (line.ins_thick === '-' ? '' : String(line.ins_thick ?? '').replace(/[^0-9.]/g, ''));
+                    // Jangan menghapus "-" atau karakter lain dari Thickness.
+                    line.ins_thick = String(line.ins_thick ?? '').trim();
                     line.seq = String(line.seq ?? '').replace(/\D/g, '');
                     line.service = String(line.service ?? '').trim();
                     line.complete_no = '';
