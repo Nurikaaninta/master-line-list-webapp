@@ -1026,10 +1026,11 @@ function getApprovalDisplay(line, proj, stage) {
     const previousBadge = previous
         ? `<span class="approval-status-badge approval-approved">${escapeHtml(previous.label)}</span>`
         : '';
-    // Histori approval yang dipertahankan tetap tampil untuk Process Engineer,
-    // Lead, dan Project Manager. Badge cycle sebelumnya yang lebih baru tidak
-    // ditumpuk kembali pada Cycle berikutnya.
-    const withPreviousBadge = (html) => `${previousBadges}${html}`;
+    // Histori approval cycle sebelumnya hanya ditampilkan saat line hasil carry-forward
+    // belum masuk kembali ke alur approval cycle aktif. Setelah line sudah dikirim pada
+    // cycle aktif, tampilkan SATU status cycle aktif saja agar badge approval lama tidak
+    // menumpuk di samping status seperti "Waiting Approval Lead & PM".
+    const withPreviousBadge = (html) => submitted ? html : `${previousBadges}${html}`;
     const carriedForward = Number(line?.carriedForwardFromCycle || 0) === Math.max(0, cycle - 1) || bucket?.carriedForward === true;
 
     // Setelah final approval sebuah cycle, line yang sama dibawa ke cycle berikutnya.
@@ -1056,7 +1057,7 @@ function getApprovalDisplay(line, proj, stage) {
         // sudah selesai (Cycle 1, 2, 3, dst.) ditambah approval cycle aktif.
         // Ini hanya mengubah tampilan histori Process Approval dan tidak
         // mengubah alur workflow cycle berikutnya.
-        return `${previousBadges}<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
+        return `<span class="approval-status-badge approval-approved">Approved Rev ${escapeHtml(currentRevision)} ${escapeHtml(currentStatusCode)}</span>`;
     }
     // PM memiliki dua tahap: setelah Lead selesai, line siap di-approve PM;
     // setelah PM melakukan Approve All/per-line approval, line masuk tahap
