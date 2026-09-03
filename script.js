@@ -410,6 +410,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('dashboardPage').classList.remove('hidden');
                 
                 setupUserInterfaceByRole();
+                // Render ulang setelah currentUser terisi agar hak admin dan tombol aksi langsung muncul.
+                renderTeamMembers();
                 renderDashboard();
                 // ---------------------------------------------------------
 
@@ -456,6 +458,48 @@ document.addEventListener('DOMContentLoaded', () => {
             closeAddAccountModal();
             showModal("Berhasil", `Akun baru untuk ${name} (${role}) berhasil ditambahkan dan langsung aktif.`, "success");
             adminAddAccountForm.reset();
+        });
+    }
+
+    const teamMembersBody = document.getElementById('teamMembersBody');
+    if (teamMembersBody) {
+        teamMembersBody.addEventListener('click', (e) => {
+            const button = e.target.closest('[data-team-action]');
+            if (!button) return;
+            const action = button.dataset.teamAction;
+            const accountId = button.dataset.accountId;
+            if (action === 'edit') openEditAccountModal(accountId);
+            if (action === 'delete') deleteTeamAccount(accountId);
+        });
+    }
+
+    const adminEditAccountForm = document.getElementById('adminEditAccountForm');
+    if (adminEditAccountForm) {
+        adminEditAccountForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!currentUser || currentUser.role !== 'System Administrator') return;
+            const id = document.getElementById('adminEditAccountId').value;
+            const name = document.getElementById('adminEditName').value.trim();
+            const email = document.getElementById('adminEditEmail').value.trim().toLowerCase();
+            const role = document.getElementById('adminEditRole').value;
+            const pass = document.getElementById('adminEditPassword').value.trim();
+            const index = accountsList.findIndex(acc => String(acc.id) === String(id));
+            if (index < 0) return;
+            if (!name || !email || !role) {
+                showModal('Data Belum Lengkap', 'Nama, email, dan role wajib diisi.', 'warning');
+                return;
+            }
+            if (accountsList.some(acc => String(acc.id) !== String(id) && acc.email.toLowerCase() === email)) {
+                showModal('Peringatan', 'Email akun tersebut sudah digunakan oleh anggota lain.', 'warning');
+                return;
+            }
+            accountsList[index] = { ...accountsList[index], name, email, role, ...(pass ? { pass } : {}) };
+            if (String(currentUser.id) === String(id)) currentUser = accountsList[index];
+            saveAccounts();
+            renderTeamMembers();
+            closeEditAccountModal();
+            setupUserInterfaceByRole();
+            showModal('Berhasil', 'Data anggota berhasil diperbarui.', 'success');
         });
     }
 
@@ -3339,15 +3383,32 @@ function renderTeamMembers() {
     const tbody = document.getElementById('teamMembersBody');
     const countEl = document.getElementById('teamMemberCount');
     if (!tbody) return;
+
+    const isAdmin = currentUser && String(currentUser.role).trim() === 'System Administrator';
     tbody.innerHTML = '';
+
     accountsList.forEach((account) => {
         const tr = document.createElement('tr');
         const status = account.active === false ? 'Inactive' : 'Active';
+        const canModify = isAdmin && account.id !== currentUser?.id;
+
         tr.innerHTML = `
             <td class="p-3 font-bold"></td>
             <td class="p-3"></td>
             <td class="p-3"></td>
-            <td class="p-3 text-center"><span class="px-2 py-0.5 rounded font-bold ${account.active === false ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}"></span></td>`;
+            <td class="p-3 text-center"><span class="px-2 py-0.5 rounded font-bold ${account.active === false ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}"></span></td>
+            <td class="p-3 text-center team-admin-actions">
+                ${isAdmin ? `
+                    <div class="flex items-center justify-center gap-2 whitespace-nowrap">
+                        <button type="button" data-team-action="edit" data-account-id="${escapeHtml(String(account.id))}" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[11px] font-bold">
+                            <i class="fa-solid fa-pen-to-square mr-1"></i>Edit
+                        </button>
+                        ${canModify ? `<button type="button" data-team-action="delete" data-account-id="${escapeHtml(String(account.id))}" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[11px] font-bold">
+                            <i class="fa-solid fa-trash-can mr-1"></i>Hapus
+                        </button>` : `<button type="button" disabled class="px-2.5 py-1 bg-slate-200 text-slate-500 rounded-md text-[11px] font-bold cursor-not-allowed" title="Akun yang sedang digunakan tidak dapat dihapus">Akun Aktif</button>`}
+                    </div>` : '<span class="text-slate-400">-</span>'}
+            </td>`;
+
         const cells = tr.querySelectorAll('td');
         cells[0].textContent = account.name;
         cells[1].textContent = account.email;
@@ -3355,7 +3416,39 @@ function renderTeamMembers() {
         cells[3].querySelector('span').textContent = status;
         tbody.appendChild(tr);
     });
+
     if (countEl) countEl.textContent = `${accountsList.length} Anggota`;
+}
+
+function openEditAccountModal(accountId) {
+    if (!currentUser || currentUser.role !== 'System Administrator') return;
+    const account = accountsList.find(acc => String(acc.id) === String(accountId));
+    if (!account) return;
+    document.getElementById('adminEditAccountId').value = account.id;
+    document.getElementById('adminEditName').value = account.name || '';
+    document.getElementById('adminEditEmail').value = account.email || '';
+    document.getElementById('adminEditRole').value = account.role || 'Process Engineer';
+    document.getElementById('adminEditPassword').value = '';
+    document.getElementById('editAccountModal').classList.remove('hidden');
+}
+
+function closeEditAccountModal() {
+    document.getElementById('editAccountModal')?.classList.add('hidden');
+}
+
+function deleteTeamAccount(accountId) {
+    if (!currentUser || currentUser.role !== 'System Administrator') return;
+    const account = accountsList.find(acc => String(acc.id) === String(accountId));
+    if (!account) return;
+    if (String(account.id) === String(currentUser.id)) {
+        showModal('Tidak Diizinkan', 'Akun yang sedang digunakan tidak dapat dihapus.', 'warning');
+        return;
+    }
+    if (!confirm(`Hapus akun ${account.name}? Tindakan ini tidak dapat dibatalkan.`)) return;
+    accountsList = accountsList.filter(acc => String(acc.id) !== String(accountId));
+    saveAccounts();
+    renderTeamMembers();
+    showModal('Berhasil', `Akun ${account.name} berhasil dihapus.`, 'success');
 }
 
 function openAddAccountModal() {
