@@ -125,49 +125,34 @@
             <!-- Bagian Menu Navigasi Sidebar yang Diperbarui -->
             <nav class="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto text-xs">
                 
-                <!-- Bagian "Currently Managing" di Sidebar (Tepat di atas Dashboard Overview) -->
-                <div class="px-0 mb-4 relative" id="sidebarProjectContainer">
-                    <div class="text-[11px] text-slate-400 font-medium mb-1 sidebar-text">
-                        Currently Managing:
-                    </div>
-
-                    <!-- Tombol Dropdown Utama -->
-                    <button onclick="toggleSidebarProjectDropdown()" id="currentProjectBtn" class="flex items-center justify-between w-full text-left py-1.5 px-2 bg-slate-900/60 border border-slate-700/60 rounded-lg hover:bg-slate-800 transition">
-                        <span id="activeProjectText" class="text-xs font-bold text-blue-400 truncate pr-2 sidebar-text">
-                            CPO STORAGE & TRANSFER FACILITY (DATA 1)
-                        </span>
-                        <i id="dropdownChevron" class="fa-solid fa-chevron-down text-[10px] text-blue-400 transition-transform"></i>
-                    </button>
-
-                    <!-- Panel Dropdown List Proyek -->
-                    <div id="sidebarProjectDropdownMenu" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden text-xs py-1">
-                        
-                        <!-- Daftar Proyek Dinamis -->
-                        <div id="dropdownProjectList" class="max-h-40 overflow-y-auto">
-                            <!-- Item proyek akan dimuat secara otomatis di sini -->
-                        </div>
-
-                        <!-- Garis Pemisah -->
-                        <div class="my-1 border-t border-slate-700"></div>
-
-                        <!-- Opsi Tambah Proyek Baru: disembunyikan untuk Project Manager -->
-                        <button id="sidebarAddProjectBtn" onclick="openAddProjectModal(); closeSidebarProjectDropdown();" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-slate-800 transition font-medium">
-                            + Add New Project...
-                        </button>
-                    </div>
-                </div>
-
                 <!-- Tombol Dashboard Overview -->
                 <button id="menuBtnOverview" onclick="switchDashboardTab('overview')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
                     <i class="fa-solid fa-table-cells-large text-base shrink-0"></i>
                     <span class="sidebar-text text-sm font-medium">Dashboard Overview</span>
                 </button>
 
-                <!-- Tombol Project Studio & Line List -->
-                <button id="menuBtnStudio" onclick="switchDashboardTab('studio')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
-                    <i class="fa-solid fa-diagram-project text-base shrink-0"></i>
-                    <span class="sidebar-text text-sm font-medium">Project Studio & Line List</span>
-                </button>
+                <!-- Project Studio & Line List + submenu daftar project -->
+                <div id="projectStudioMenuContainer" class="space-y-1">
+                    <button id="menuBtnStudio" onclick="toggleProjectStudioMenu()" class="sidebar-menu-btn w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
+                        <span class="flex items-center space-x-3 min-w-0">
+                            <i class="fa-solid fa-diagram-project text-base shrink-0"></i>
+                            <span class="sidebar-text text-sm font-medium text-left">Project Studio & Line List</span>
+                        </span>
+                        <i id="projectStudioChevron" class="fa-solid fa-chevron-down text-[11px] sidebar-text transition-transform"></i>
+                    </button>
+
+                    <!-- Isi dari Currently Managing dipindahkan ke submenu ini -->
+                    <div id="projectStudioSubmenu" class="hidden ml-3 pl-2 border-l-2 border-blue-500/50 overflow-hidden">
+                        <div id="dropdownProjectList" class="max-h-52 overflow-y-auto bg-slate-900/50 border border-slate-700/60 rounded-md py-1">
+                            <!-- Daftar project dimuat otomatis -->
+                        </div>
+                        <div class="mt-1 border border-slate-700/60 rounded-md overflow-hidden">
+                            <button id="sidebarAddProjectBtn" onclick="openAddProjectModal(); closeProjectStudioMenu();" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-slate-800 transition font-medium text-xs">
+                                + Add New Project...
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Tombol P&ID / Documents -->
                 <button id="menuBtnDocuments" onclick="switchDashboardTab('documents')" class="sidebar-menu-btn w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-slate-300 hover:bg-blue-900/50 transition">
@@ -797,33 +782,27 @@
             }
         };
 
-        // Fungsi interaksi dropdown proyek sidebar
-        function toggleSidebarProjectDropdown() {
-            const menu = document.getElementById('sidebarProjectDropdownMenu');
-            const chevron = document.getElementById('dropdownChevron');
-            
-            menu.classList.toggle('hidden');
-            if (!menu.classList.contains('hidden')) {
-                chevron.classList.add('rotate-180');
-                renderSidebarProjects();
-            } else {
-                chevron.classList.remove('rotate-180');
-            }
-        }
+        // Project Studio submenu: daftar project dipindahkan dari "Currently Managing" ke bawah menu Studio.
+        window.toggleProjectStudioMenu = function() {
+            const submenu = document.getElementById('projectStudioSubmenu');
+            const chevron = document.getElementById('projectStudioChevron');
+            if (!submenu) return;
 
-        function closeSidebarProjectDropdown() {
-            const menu = document.getElementById('sidebarProjectDropdownMenu');
-            const chevron = document.getElementById('dropdownChevron');
-            if (menu) menu.classList.add('hidden');
+            // Membuka Project Studio sekaligus membuka/menutup daftar project.
+            if (typeof switchDashboardTab === 'function') switchDashboardTab('studio');
+
+            submenu.classList.toggle('hidden');
+            const isOpen = !submenu.classList.contains('hidden');
+            if (chevron) chevron.classList.toggle('rotate-180', isOpen);
+            if (isOpen) renderSidebarProjects();
+        };
+
+        window.closeProjectStudioMenu = function() {
+            const submenu = document.getElementById('projectStudioSubmenu');
+            const chevron = document.getElementById('projectStudioChevron');
+            if (submenu) submenu.classList.add('hidden');
             if (chevron) chevron.classList.remove('rotate-180');
-        }
-
-        window.addEventListener('click', function(e) {
-            const container = document.getElementById('sidebarProjectContainer');
-            if (container && !container.contains(e.target)) {
-                closeSidebarProjectDropdown();
-            }
-        });
+        };
 
         function renderSidebarProjects() {
             const container = document.getElementById('dropdownProjectList');
@@ -833,17 +812,13 @@
             if (typeof projectsData !== 'undefined') {
                 projectsData.forEach((proj, idx) => {
                     const isActive = idx === (typeof currentProjectIndex !== 'undefined' ? currentProjectIndex : 0);
-                    let itemStyle = isActive 
-                        ? "bg-slate-700 text-white font-semibold" 
-                        : "text-blue-400 hover:bg-slate-800 hover:text-blue-300";
-
                     const displayName = String(proj.name || '').trim().toUpperCase();
                     html += `
                         <div class="flex items-center ${isActive ? 'bg-slate-700' : 'bg-transparent'}">
-                            <button onclick="selectSidebarProject(${idx})" class="flex-1 min-w-0 text-left px-3 py-2 transition truncate ${isActive ? 'text-white font-semibold' : 'text-blue-400 hover:bg-slate-800 hover:text-blue-300'}">
+                            <button onclick="selectSidebarProject(${idx})" class="flex-1 min-w-0 text-left px-3 py-2 transition truncate ${isActive ? 'text-white font-semibold' : 'text-blue-300 hover:bg-slate-800 hover:text-white'}">
                                 ${displayName}
                             </button>
-                            <button onclick="event.stopPropagation(); openEditProjectRulesModal(${idx}); closeSidebarProjectDropdown();" class="shrink-0 px-2 py-2 ${isActive ? 'text-slate-200 hover:text-white' : 'text-slate-500 hover:text-blue-300'}" title="Edit Cycle" aria-label="Edit Cycle">
+                            <button onclick="event.stopPropagation(); openEditProjectRulesModal(${idx}); closeProjectStudioMenu();" class="shrink-0 px-2 py-2 ${isActive ? 'text-slate-200 hover:text-white' : 'text-slate-500 hover:text-blue-300'}" title="Edit Cycle" aria-label="Edit Cycle">
                                 <i class="fa-solid fa-pen-to-square text-[10px]"></i>
                             </button>
                         </div>
@@ -853,25 +828,15 @@
             container.innerHTML = html;
         }
 
-        function selectSidebarProject(idx) {
-            if (typeof currentProjectIndex !== 'undefined') {
-                currentProjectIndex = idx;
-            }
-            if (typeof currentProject !== 'undefined') {
-                currentProject = idx;
-            }
-            
-            const activeText = document.getElementById('activeProjectText');
-            if (activeText && projectsData[idx]) {
-                activeText.innerText = String(projectsData[idx].name || '').trim().toUpperCase();
-            }
+        window.selectSidebarProject = function(idx) {
+            if (typeof currentProjectIndex !== 'undefined') currentProjectIndex = idx;
+            if (typeof currentProject !== 'undefined') currentProject = idx;
 
-            closeSidebarProjectDropdown();
-            
-            if (typeof renderDashboard === 'function') {
-                renderDashboard();
-            }
-        }
+            // Tetap berada di Project Studio dan tampilkan project yang dipilih.
+            if (typeof switchDashboardTab === 'function') switchDashboardTab('studio');
+            if (typeof renderDashboard === 'function') renderDashboard();
+            closeProjectStudioMenu();
+        };
     </script>
 </body>
 </html>
